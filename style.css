@@ -1,0 +1,49 @@
+.mes.ps-private .mes_block {
+    border-left: 3px solid var(--SmartThemeQuoteColor, #e18a24);
+    padding-left: 6px;
+}
+
+.ps-badge {
+    font-size: 0.8em;
+    opacity: 0.75;
+    margin: 2px 0 4px;
+}
+
+#ps_scene_bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background-color: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, 0.4));
+    border: 1px solid var(--SmartThemeQuoteColor, #e18a24);
+    font-size: 0.9em;
+}
+
+#ps_scene_bar > span {
+    flex: 1;
+}
+
+#ps_scene_bar .menu_button {
+    margin: 0;
+    padding: 2px 8px;
+}
+
+.ps-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+
+.ps-picker-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+}
+
+.private-scenes-settings textarea,
+.private-scenes-settings input.text_pole {
+    width: 100%;
+}

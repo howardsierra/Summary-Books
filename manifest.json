@@ -1,0 +1,13 @@
+{
+    "display_name": "Private Scenes",
+    "loading_order": 100,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "howardsierra",
+    "version": "0.1.0",
+    "homePage": "https://github.com/howardsierra/summary-books",
+    "generate_interceptor": "privateScenesInterceptor",
+    "auto_update": true
+}
