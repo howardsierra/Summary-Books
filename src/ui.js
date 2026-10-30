@@ -13,11 +13,31 @@ import { editClock, openMemory, refreshMemory } from './hub.js';
 
 // ─── Chips ───────────────────────────────────────────────────────────
 
-export function chip(name) {
+/** "Ana" → "A", "Lady Merriweather" → "LM". */
+export function initials(name) {
+    const words = String(name).trim().split(/\s+/).filter(Boolean);
+    const first = (word) => Array.from(word)[0] ?? '';
+    if (!words.length) return '?';
+    return (words.length > 1 ? first(words[0]) + first(words.at(-1)) : first(words[0])).toUpperCase();
+}
+
+/** A round monogram in the character's color; an icon replaces the letters when given. */
+export function avatar(name, { large = false, icon = null } = {}) {
+    const el = document.createElement('span');
+    el.classList.add('ps-avatar');
+    if (large) el.classList.add('ps-avatar-lg');
+    el.style.setProperty('--ps-hue', String(nameHue(name)));
+    el.setAttribute('aria-hidden', 'true');
+    if (icon) el.append(Object.assign(document.createElement('i'), { className: `fa-solid ${icon}` }));
+    else el.textContent = initials(name);
+    return el;
+}
+
+export function chip(name, { icon = null } = {}) {
     const el = document.createElement('span');
     el.classList.add('ps-chip');
     el.style.setProperty('--ps-hue', String(nameHue(name)));
-    el.textContent = name;
+    el.append(avatar(name, { icon }), Object.assign(document.createElement('span'), { className: 'ps-chip-name', textContent: name }));
     return el;
 }
 
@@ -54,7 +74,8 @@ function chipToggle(name, checked) {
     box.value = name;
     box.checked = checked;
     const pill = chip(name);
-    pill.prepend(Object.assign(document.createElement('i'), { className: 'fa-solid fa-check ps-check' }));
+    // When selected, the monogram turns into a tick.
+    pill.querySelector('.ps-avatar').append(Object.assign(document.createElement('i'), { className: 'fa-solid fa-check ps-check' }));
     label.append(box, pill);
     return label;
 }

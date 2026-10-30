@@ -16,7 +16,7 @@ import {
 } from './memory.js';
 import { joinSummary } from './extract.js';
 import {
-    actionButton, chip, chips, confirm, editSummaryPopup, jumpTo, keywordTags, openReveal, popupHeader, refreshUi, statusPill,
+    actionButton, avatar, chip, chips, confirm, editSummaryPopup, jumpTo, keywordTags, openReveal, popupHeader, refreshUi, statusPill,
 } from './ui.js';
 
 const TABS = [
@@ -39,8 +39,11 @@ export async function openMemory(startTab = 'timeline') {
     tab = TABS.some(([id]) => id === startTab) ? startTab : 'timeline';
     root = document.createElement('div');
     root.classList.add('ps-popup', 'ps-memory');
-    root.append(popupHeader('fa-book-open', 'Story Memory', ''));
-    $(root).append('<div class="ps-clock-row"></div><div class="ps-tabs" role="tablist"></div><div class="ps-tab-body"></div>');
+    const header = popupHeader('fa-book-open', 'Story Memory', 'Everything this story remembers.');
+    header.classList.add('ps-banner');
+    $(header).find('.ps-popup-titles').append('<div class="ps-clock-row"></div>');
+    root.append(header);
+    $(root).append('<div class="ps-tabs" role="tablist"></div><div class="ps-tab-body"></div>');
     refreshMemory();
     await c.callGenericPopup(root, c.POPUP_TYPE.TEXT, '', { wide: true, large: true, allowVerticalScrolling: true, okButton: 'Close' });
     root = null;
@@ -48,15 +51,6 @@ export async function openMemory(startTab = 'timeline') {
 
 export function refreshMemory() {
     if (!root) return;
-    const state = chatState();
-    const scenes = findScenes();
-    $(root).find('.ps-popup-header p').text([
-        plural(scenes.length, 'secret'),
-        plural(state.memories.length, 'story entry', 'story entries'),
-        plural(sheetList().length, 'character'),
-        plural(state.threads.filter(t => t.status === 'open').length, 'open thread'),
-        plural(state.facts.length, 'fact'),
-    ].join(' · '));
     renderClockRow();
     renderTabs();
 
@@ -66,16 +60,27 @@ export function refreshMemory() {
 
 function renderTabs() {
     const bar = $(root).find('.ps-tabs').empty();
+    const state = chatState();
+    const scenes = findScenes();
     const counts = {
-        timeline: chatState().drafts.length + staleItems().length,
-        threads: chatState().threads.filter(t => t.status === 'open').length,
+        timeline: scenes.length + state.memories.length,
+        characters: sheetList().length,
+        threads: state.threads.filter(t => t.status === 'open').length,
+        facts: state.facts.length,
+        secrets: scenes.length,
     };
+    // Reviews waiting or out-of-date entries put a dot on the timeline tab.
+    const attention = { timeline: state.drafts.length + staleItems().length };
     for (const [id, icon, label] of TABS) {
         const button = $('<div class="ps-tab" role="tab" tabindex="0"><i class="fa-solid" aria-hidden="true"></i><span></span></div>');
         button.toggleClass('ps-tab-active', id === tab).attr('aria-selected', String(id === tab));
         button.find('i').addClass(icon);
         button.find('span').text(label);
         if (counts[id]) button.append($('<b class="ps-tab-count"></b>').text(counts[id]));
+        if (attention[id]) {
+            button.append($('<span class="ps-tab-alert"></span>').attr('title', `${attention[id]} need your attention`));
+            button.attr('aria-label', `${label}, ${attention[id]} need your attention`);
+        }
         button.on('click keydown', (e) => {
             if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
             e.preventDefault();
@@ -84,6 +89,9 @@ function renderTabs() {
         });
         bar.append(button);
     }
+    // Keep the active tab visible when the bar scrolls sideways (phones).
+    const active = bar.find('.ps-tab-active')[0];
+    if (active) bar[0].scrollLeft = Math.max(0, active.offsetLeft - (bar[0].clientWidth - active.offsetWidth) / 2);
 }
 
 // ─── Story clock ─────────────────────────────────────────────────────
@@ -115,12 +123,12 @@ export async function editClock() {
     if (result === c.POPUP_RESULT.AFFIRMATIVE) setClock({ time: String(form.find('.ps-in-time').val()), place: String(form.find('.ps-in-place').val()) });
 }
 
+/** Time and place as items for a card's meta line. */
 function clockTags(clock) {
-    if (!clock?.time && !clock?.place) return null;
-    const wrap = $('<div class="ps-card-clock"></div>');
-    if (clock.time) wrap.append($('<span><i class="fa-solid fa-clock"></i> </span>').append(document.createTextNode(clock.time)));
-    if (clock.place) wrap.append($('<span><i class="fa-solid fa-location-dot"></i> </span>').append(document.createTextNode(clock.place)));
-    return wrap;
+    const items = [];
+    if (clock?.time) items.push($('<span class="ps-meta-item"><i class="fa-solid fa-clock"></i></span>').append(document.createTextNode(clock.time)));
+    if (clock?.place) items.push($('<span class="ps-meta-item"><i class="fa-solid fa-location-dot"></i></span>').append(document.createTextNode(clock.place)));
+    return items;
 }
 
 // ─── Timeline tab ────────────────────────────────────────────────────
@@ -148,9 +156,10 @@ function timelineCard(kind, icon) {
         <li class="ps-tl-item">
             <div class="ps-tl-node"><i class="fa-solid"></i></div>
             <div class="ps-tl-card">
-                <div class="ps-tl-top"><span class="ps-tl-title"></span><span class="ps-tl-range"></span></div>
+                <div class="ps-tl-top"><span class="ps-tl-title"></span></div>
                 <div class="ps-tl-members"></div>
                 <p class="ps-tl-summary"></p>
+                <div class="ps-card-meta"><span class="ps-meta-item ps-tl-range"><i class="fa-solid fa-message"></i><span></span></span></div>
                 <div class="ps-tl-actions"></div>
             </div>
         </li>`).addClass(`ps-kind-${kind}`).find('.ps-tl-node i').addClass(icon).end();
@@ -164,7 +173,7 @@ function renderSceneCard(scene) {
 
     const item = timelineCard('scene', 'fa-user-secret').addClass(`ps-${cls}`);
     item.find('.ps-tl-title').text(`Secret · Scene ${scene.index}`);
-    item.find('.ps-tl-range').text(`${range} · ${plural(scene.ids.length, 'msg')}`);
+    item.find('.ps-tl-range span').text(`${range} · ${plural(scene.ids.length, 'msg')}`);
     item.find('.ps-tl-top').append(statusPill(cls, icon, text));
     item.find('.ps-tl-members').append(chips(scene.members));
     if (reveals.length) {
@@ -181,7 +190,8 @@ function renderSceneCard(scene) {
     const summary = item.find('.ps-tl-summary');
     if (record?.summary) {
         summary.text(record.summary);
-        summary.after(keywordTags(record.keywords), clockTags(record.clock));
+        summary.after(keywordTags(record.keywords));
+        item.find('.ps-card-meta').append(clockTags(record.clock));
     } else {
         const preview = String(ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');
         summary.addClass('ps-preview').text(preview.length > 180 ? `${preview.slice(0, 180)}…` : preview);
@@ -211,7 +221,7 @@ function renderSceneCard(scene) {
 function renderOrphanCard({ id, record }) {
     const item = timelineCard('scene', 'fa-user-secret').addClass('ps-stale');
     item.find('.ps-tl-title').text('Secret');
-    item.find('.ps-tl-range').text(`was at message ${record.anchor ?? '?'}`);
+    item.find('.ps-tl-range span').text(`was at message ${record.anchor ?? '?'}`);
     item.find('.ps-tl-top').append(statusPill('stale', 'fa-triangle-exclamation', STALE_TEXT.gone));
     item.find('.ps-tl-members').append(chips(record.members ?? []));
     item.find('.ps-tl-summary').text(record.summary ?? '');
@@ -232,12 +242,13 @@ function renderMemoryCard(memory) {
     const item = timelineCard('memory', ['fa-scroll', 'fa-book', 'fa-landmark'][level] ?? 'fa-scroll')
         .addClass(busy ? 'ps-saving' : stale ? 'ps-stale' : 'ps-saved').addClass(`ps-level-${level}`);
     item.find('.ps-tl-title').text(levelName(level));
-    item.find('.ps-tl-range').text(`Messages ${from}–${to}${memory.parts?.length ? ` · merged from ${memory.parts.length} parts` : ''}`);
+    item.find('.ps-tl-range span').text(`Messages ${from}–${to}${memory.parts?.length ? ` · merged from ${memory.parts.length} parts` : ''}`);
     item.find('.ps-tl-top').append(busy ? statusPill('saving', 'fa-spinner fa-spin', 'Saving…')
         : stale ? statusPill('stale', 'fa-triangle-exclamation', STALE_TEXT[source.state])
             : statusPill('saved', 'fa-book-bookmark', 'In lorebook'));
     item.find('.ps-tl-members').remove();
-    item.find('.ps-tl-summary').text(memory.summary ?? '').after(keywordTags(memory.keywords), clockTags(memory.clock));
+    item.find('.ps-tl-summary').text(memory.summary ?? '').after(keywordTags(memory.keywords));
+    item.find('.ps-card-meta').append(clockTags(memory.clock));
 
     const actions = item.find('.ps-tl-actions');
     actions.append(actionButton('ps-act-jump', 'fa-location-arrow', 'Jump').on('click', () => jumpTo(from)));
@@ -411,8 +422,11 @@ function renderSheet(sheet, busy) {
             <ul class="ps-sheet-rels"></ul>
             <div class="ps-tl-actions"></div>
         </div>`);
-    const top = card.find('.ps-sheet-top').append(chip(sheet.name));
-    if (Number.isFinite(sheet.updatedAt)) top.append($('<small></small>').text(`updated at msg ${sheet.updatedAt}`));
+    const who = $('<div class="ps-sheet-who"><b></b><small></small></div>');
+    who.find('b').text(sheet.name);
+    who.find('small').text(Number.isFinite(sheet.updatedAt) ? `Updated at message ${sheet.updatedAt}` : 'Not updated yet');
+    card.find('.ps-sheet-top').append(avatar(sheet.name, { large: true }), who);
+    card[0].style.setProperty('--ps-hue', String(nameHue(sheet.name)));
     card.find('.ps-sheet-state').text(sheet.state || 'Nothing known yet.').toggleClass('ps-preview', !sheet.state);
     for (const rel of Object.values(sheet.rels ?? {})) {
         const li = $('<li></li>').append(chip(rel.name), $('<span></span>').text(rel.text));
@@ -626,9 +640,8 @@ function knowledgeCards(rows) {
         card.find('b').text(`Scene ${scene.index}`);
         card.find('small').text(about.length > 110 ? `${about.slice(0, 110)}…` : about);
         for (const cell of cells) {
-            const pill = $(chip(cell.name)).addClass(`ps-kchip ps-kchip-${cell.state}`).attr('title', cell.title);
             const icon = { member: 'fa-check', revealed: 'fa-eye', unknown: 'fa-plus' }[cell.state];
-            pill.prepend($('<i class="fa-solid"></i>').addClass(icon));
+            const pill = $(chip(cell.name, { icon })).addClass(`ps-kchip ps-kchip-${cell.state}`).attr('title', cell.title);
             if (cell.detail) pill.append($('<small class="ps-kchip-detail"></small>').text(cell.detail));
             if (cell.toggle) pill.addClass('ps-clickable').attr('role', 'button').on('click', cell.toggle);
             card.find('.ps-kchips').append(pill);
