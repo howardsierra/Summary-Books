@@ -7,6 +7,8 @@
 export const MODULE = 'privateScenes';
 export const FLAG = 'private_scene';
 export const LEAK = 'ps_leak';
+/** Stable id per message slot, so memories can find their source messages after edits and deletions. */
+export const MID = 'ps_mid';
 export const BOOK_KEY = 'world_info';
 
 export const defaultSettings = Object.freeze({
@@ -40,6 +42,17 @@ export const defaultSettings = Object.freeze({
         + 'Use names instead of pronouns. Output only the summary, with no preamble.',
     leakCheck: true,
     leakAutoRegenerate: false,
+    reviewBeforeSave: false,
+    consolidate: true,
+    consolidateEvery: 5,
+    consolidateKeep: 3,
+    chapterPrompt: 'Combine these consecutive parts of a roleplay story into one shorter summary of 4 to 7 sentences in past tense. '
+        + 'Keep major events, decisions, changes in relationships, and anything still unresolved. Drop minor details. '
+        + 'Use names instead of pronouns. Output only the summary, with no preamble.',
+    trackThreads: true,
+    autoSheets: true,
+    clockEnabled: true,
+    clockAutoTrack: false,
 });
 
 export const ctx = () => SillyTavern.getContext();
@@ -48,6 +61,7 @@ export const ctx = () => SillyTavern.getContext();
 export const hooks = {
     changed: () => { },
     sceneEnded: (_sceneId) => { },
+    openMemory: (_tab) => { },
 };
 
 export function settings() {
@@ -69,6 +83,12 @@ export function chatState() {
     state.reveals ??= {};
     state.memories ??= [];
     state.memoryCursor ??= 0;
+    state.drafts ??= [];
+    state.facts ??= [];
+    state.threads ??= [];
+    state.sheets ??= {};
+    state.clock ??= { time: '', place: '' };
+    state.entries ??= {};
     return state;
 }
 
@@ -158,11 +178,67 @@ export function setFlag(message, flag) {
     if (flag) rememberNames(flag.members);
 }
 
-/** A new swipe starts with empty extras; carry the flag over from its siblings. */
+/** A new swipe starts with empty extras; carry the flag and message id over from its siblings. */
 export function inheritSwipeFlag(message) {
-    if (!message || getFlag(message) || !Array.isArray(message.swipe_info)) return;
-    const flagged = message.swipe_info.find(info => getFlag(info));
-    if (flagged) setFlag(message, getFlag(flagged));
+    if (!message || !Array.isArray(message.swipe_info)) return;
+    if (!getFlag(message)) {
+        const flagged = message.swipe_info.find(info => getFlag(info));
+        if (flagged) setFlag(message, getFlag(flagged));
+    }
+    if (!message.extra?.[MID]) {
+        const mid = message.swipe_info.find(info => info?.extra?.[MID])?.extra[MID];
+        if (mid) setMid(message, mid);
+    }
+}
+
+// ─── Message ids & source tracking ───────────────────────────────────
+
+function setMid(message, mid) {
+    message.extra ??= {};
+    message.extra[MID] = mid;
+    for (const info of Array.isArray(message.swipe_info) ? message.swipe_info : []) {
+        if (!info || typeof info !== 'object') continue;
+        info.extra ??= {};
+        info.extra[MID] = mid;
+    }
+}
+
+export function ensureMid(message) {
+    if (!message.extra?.[MID]) {
+        setMid(message, newId('m'));
+        saveSoon();
+    }
+    return message.extra[MID];
+}
+
+/** Small, stable string hash (djb2). */
+export function hashText(text) {
+    let hash = 5381;
+    for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) >>> 0;
+    return hash.toString(36);
+}
+
+const textHash = (ids) => hashText(ids.map(id => ctx().chat[id]?.mes ?? '').join('\u0001'));
+
+/** Fingerprint of the messages a memory was built from. */
+export function sourcesOf(ids) {
+    const chat = ctx().chat;
+    return { sources: ids.map(id => ensureMid(chat[id])), hash: textHash(ids) };
+}
+
+/**
+ * Whether a memory's source messages still match the chat.
+ * state: 'ok' | 'edited' (text changed) | 'missing' (some deleted) | 'gone' (all deleted).
+ * ids are the current positions of the sources that still exist.
+ */
+export function sourceStatus(record) {
+    if (!record?.sources?.length) return { state: 'ok', ids: null };
+    const positions = new Map();
+    ctx().chat.forEach((message, i) => message.extra?.[MID] && positions.set(message.extra[MID], i));
+    const ids = record.sources.map(mid => positions.get(mid)).filter(i => i !== undefined);
+    if (!ids.length) return { state: 'gone', ids };
+    if (ids.length < record.sources.length) return { state: 'missing', ids, missing: record.sources.length - ids.length };
+    return { state: textHash(ids) === record.hash ? 'ok' : 'edited', ids };
 }
 
 /** Parse "12" or "12-18" into message ids; defaults to the last message. */

@@ -1,18 +1,25 @@
 // Private Scenes — flag messages as private between certain characters, so the
-// narrator knows those events happened out of everyone else's sight. Keeps a
-// timeline of secrets and story memory in the chat's lorebook, tracks who
-// found out later, and checks replies for leaked secrets.
+// narrator knows those events happened out of everyone else's sight. Keeps the
+// story's memory in the chat's lorebook (secrets, story summaries merged into
+// chapters, character sheets, open threads, pinned facts, the story clock),
+// tracks who found out later, and checks replies for leaked secrets.
 
 import {
     ctx, endScene, flagMessages, formatTemplate, getFlag, getScene, hooks, inheritSwipeFlag, membersKey,
     parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
     adoptScene,
 } from './src/core.js';
-import { autoSaveScene, hasSavedScenes, maybeAutoMemory, refreshSceneEntry, saveMemory, saveScene, saveStorySoFar } from './src/lorebook.js';
+import {
+    autoSaveScene, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
+    saveStorySoFar,
+} from './src/lorebook.js';
+import { addFact, addThread, clockText, getClock, hasPrivateLists, setClock, trackClock } from './src/memory.js';
 import { checkLeak, clearRetries } from './src/leaks.js';
-import { initUi, openKnowledge, openTimeline, refreshUi } from './src/ui.js';
+import { initUi, refreshUi } from './src/ui.js';
+import { openMemory } from './src/hub.js';
 
 const PROMPT_KEY = 'private_scenes_rules';
+const CLOCK_KEY = 'private_scenes_clock';
 // extension_prompt_types.IN_CHAT / extension_prompt_roles.SYSTEM
 const IN_CHAT = 1;
 const ROLE_SYSTEM = 0;
@@ -30,7 +37,7 @@ let pendingReply = null;
 globalThis.privateScenesInterceptor = async function (chat, _contextSize, _abort, type) {
     const s = settings();
     if (!s.enabled) {
-        ctx().setExtensionPrompt(PROMPT_KEY, '', IN_CHAT, 0);
+        clearPrompts();
         return;
     }
 
@@ -62,40 +69,55 @@ globalThis.privateScenesInterceptor = async function (chat, _contextSize, _abort
     }
 
     const parts = [];
-    if (anyPrivate || scene || hasSavedScenes()) parts.push(s.rules);
+    if (anyPrivate || scene || hasSavedScenes() || hasPrivateLists()) parts.push(s.rules);
     const current = scene ?? pendingReply;
     if (current) parts.push(formatTemplate(s.sceneRules, current.members));
     ctx().setExtensionPrompt(PROMPT_KEY, parts.join('\n'), IN_CHAT, Number(s.rulesDepth) || 0, false, ROLE_SYSTEM);
+    ctx().setExtensionPrompt(CLOCK_KEY, s.clockEnabled ? clockText() : '', IN_CHAT, Number(s.rulesDepth) || 0, false, ROLE_SYSTEM);
 };
+
+function clearPrompts() {
+    ctx().setExtensionPrompt(PROMPT_KEY, '', IN_CHAT, 0);
+    ctx().setExtensionPrompt(CLOCK_KEY, '', IN_CHAT, 0);
+}
 
 // ─── Inline tags ─────────────────────────────────────────────────────
 
-const TAG = /^\s*@(private|scene)\s+([^:\n]+?)\s*(?::|\n|$)\s*/i;
+const TAG = /^\s*@(private|scene|time|place)\s+([^:\n]+?)\s*(?::|\n|$)\s*/i;
 const END_TAG = /^\s*@(endscene|end-scene|public)\b\s*:?\s*/i;
 
-/** Handles "@private Ana, Kael:", "@scene Ana, Kael:" and "@endscene" at the start of a sent message. */
+/**
+ * Handles tags at the start of a sent message, in any combination:
+ * "@private Ana, Kael:", "@scene Ana, Kael:", "@endscene", "@time Day 4, dawn:", "@place the stables:".
+ */
 function applyInlineTags(id) {
     const message = ctx().chat[id];
     if (!settings().inlineTags || !message?.is_user) return;
 
-    const end = message.mes.match(END_TAG);
-    if (end) {
-        message.mes = message.mes.slice(end[0].length);
-        endScene();
-        return;
-    }
+    for (let guard = 0; guard < 5; guard++) {
+        const end = message.mes.match(END_TAG);
+        if (end) {
+            message.mes = message.mes.slice(end[0].length);
+            endScene();
+            continue;
+        }
+        const tag = message.mes.match(TAG);
+        if (!tag) return;
+        const kind = tag[1].toLowerCase();
+        message.mes = message.mes.slice(tag[0].length);
 
-    const tag = message.mes.match(TAG);
-    if (!tag) return;
-    const members = parseNames(tag[2]);
-    if (!members.length) return;
-    message.mes = message.mes.slice(tag[0].length);
-
-    if (tag[1].toLowerCase() === 'scene') {
-        startScene(members);
-    } else {
-        const sceneId = flagMessages([id], members);
-        pendingReply = { members, sceneId };
+        if (kind === 'time' || kind === 'place') {
+            setClock({ [kind]: tag[2] });
+            continue;
+        }
+        const members = parseNames(tag[2]);
+        if (!members.length) continue;
+        if (kind === 'scene') {
+            startScene(members);
+        } else {
+            const sceneId = flagMessages([id], members);
+            pendingReply = { members, sceneId };
+        }
     }
 }
 
@@ -128,6 +150,7 @@ async function onMessageReceived(id, type) {
 
     if (!message.is_user && type !== 'impersonate') {
         await checkLeak(id);
+        await trackClock(id);
         await maybeAutoMemory();
     }
 }
@@ -135,13 +158,20 @@ async function onMessageReceived(id, type) {
 function onSwiped(id) {
     inheritSwipeFlag(ctx().chat[id]);
     refreshUi();
+    notifyStale();
 }
 
 function onChatChanged() {
     pendingReply = null;
     clearRetries();
-    ctx().setExtensionPrompt(PROMPT_KEY, '', IN_CHAT, 0);
+    clearPrompts();
     refreshUi();
+    notifyStale();
+}
+
+function onChatEdited() {
+    refreshUi();
+    notifyStale();
 }
 
 // ─── Slash commands ──────────────────────────────────────────────────
@@ -247,10 +277,12 @@ function registerCommands() {
     });
 
     add({
-        name: 'private-timeline',
-        helpString: 'Opens the private timeline for this chat.',
-        callback: () => {
-            openTimeline();
+        name: 'memory',
+        aliases: ['private-timeline'],
+        helpString: 'Opens the Story Memory window. Optional tab: timeline, characters, threads, facts, secrets.',
+        unnamedArgumentList: [SlashCommandArgument.fromProps({ description: 'Tab to open', typeList: [ARGUMENT_TYPE.STRING] })],
+        callback: (_args, value) => {
+            openMemory(String(value ?? '').trim() || 'timeline');
             return '';
         },
     });
@@ -260,10 +292,54 @@ function registerCommands() {
         aliases: ['who-knows'],
         helpString: 'Opens the “who knows what” grid for this chat.',
         callback: () => {
-            openKnowledge();
+            openMemory('secrets');
             return '';
         },
     });
+
+    add({
+        name: 'memory-merge',
+        helpString: 'Merges the oldest story entries into a chapter now (and chapters into an arc), if there are enough.',
+        callback: async () => {
+            await maybeConsolidate({ force: true });
+            return '';
+        },
+    });
+
+    add({
+        name: 'pin',
+        helpString: 'Pins a fact the model should always remember. Example: <code>/pin Ana is left-handed</code>',
+        unnamedArgumentList: [namesArg(true, 'The fact')],
+        callback: async (_args, value) => {
+            await addFact(String(value));
+            return '';
+        },
+    });
+
+    add({
+        name: 'thread',
+        helpString: 'Adds an open story thread (a promise, plan, debt, or open question). Example: <code>/thread Kael owes Bob a favor</code>',
+        unnamedArgumentList: [namesArg(true, 'The thread')],
+        callback: async (_args, value) => {
+            await addThread(String(value));
+            return '';
+        },
+    });
+
+    for (const kind of ['time', 'place']) {
+        add({
+            name: `story-${kind}`,
+            aliases: [kind === 'time' ? 'when' : 'where'],
+            helpString: `Sets the story ${kind}. With no text, returns it. Example: <code>/story-${kind} ${kind === 'time' ? 'Day 4, dawn' : 'the stables'}</code>`,
+            unnamedArgumentList: [namesArg(false, `The new ${kind}`)],
+            callback: (_args, value) => {
+                const text = String(value ?? '').trim();
+                if (!text) return getClock()[kind] ?? '';
+                setClock({ [kind]: text });
+                return '';
+            },
+        });
+    }
 }
 
 // ─── Init ────────────────────────────────────────────────────────────
@@ -272,6 +348,7 @@ jQuery(() => {
     settings();
     hooks.changed = refreshUi;
     hooks.sceneEnded = autoSaveScene;
+    hooks.openMemory = openMemory;
     initUi();
     registerCommands();
 
@@ -280,14 +357,11 @@ jQuery(() => {
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(eventTypes.MESSAGE_SWIPED, onSwiped);
     eventSource.on(eventTypes.CHAT_CHANGED, onChatChanged);
-    for (const type of [
-        eventTypes.USER_MESSAGE_RENDERED,
-        eventTypes.CHARACTER_MESSAGE_RENDERED,
-        eventTypes.MESSAGE_UPDATED,
-        eventTypes.MESSAGE_DELETED,
-        eventTypes.MORE_MESSAGES_LOADED,
-    ]) {
+    for (const type of [eventTypes.USER_MESSAGE_RENDERED, eventTypes.CHARACTER_MESSAGE_RENDERED, eventTypes.MORE_MESSAGES_LOADED]) {
         eventSource.on(type, refreshUi);
+    }
+    for (const type of [eventTypes.MESSAGE_UPDATED, eventTypes.MESSAGE_EDITED, eventTypes.MESSAGE_DELETED, eventTypes.MESSAGE_SWIPE_DELETED]) {
+        eventSource.on(type, onChatEdited);
     }
     refreshUi();
 });

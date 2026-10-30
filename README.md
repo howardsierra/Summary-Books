@@ -8,6 +8,7 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 - **Who knows what.** A grid of every secret and every character.
 - **Private Timeline.** Saves private scenes, and optionally the public story, as summaries in the chat's lorebook, with keywords as triggers.
 - **Inline tags.** Type `@private Ana, Kael:` in a message instead of clicking.
+- **Story Memory.** One window with tabs for the timeline, character sheets and relationships, open threads, pinned facts, and secrets. It also tracks a story clock (time and place), merges old summaries into chapters, can hold summaries for your review, and notices when edits or deletions make a saved memory out of date.
 
 Tested with SillyTavern 1.19.0 on desktop and on phone-sized screens.
 
@@ -76,6 +77,21 @@ Open it from the wand menu, the scene bar, or `/private-timeline`. Everything is
 
 Turn on **Hide the original messages after saving** to keep the context small. The summaries then stand in for the hidden messages.
 
+## Story Memory
+
+Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, or `/memory`. The header shows the **story clock**, and the tabs are:
+
+- **Timeline.** Secrets and story entries in story order.
+  - **Chapters.** Once there are enough story entries, the oldest ones are merged into a **chapter**. By default that's 5 entries, keeping the newest 3 as they are. Old chapters are merged into an **arc**. This keeps long roleplays small in the prompt. *Split* undoes a merge. Secrets are never merged.
+  - **Review queue.** With *Let me review summaries before they are saved* on, new summaries wait at the top with **Approve**, **Edit & approve** and **Discard**.
+  - **Rewind-safe.** Every saved memory remembers which messages it came from. If you edit, delete or swipe them (or open a branch without them), the entry is marked **Out of date**, and you get one warning. You can **Re-summarize** it, **Keep as is**, or remove it.
+- **Characters.** One sheet per character: their current condition, mood, goals and possessions, plus how they relate to each other character. Sheets update after each story summary and show how relationships changed ("suspicious of her, was: friendly acquaintance"). Each sheet is a lorebook entry triggered by the character's name. **Sheets only use public story memory, so they never give away a secret.**
+- **Threads.** Promises, plans, debts and open questions. Summaries add new threads and mark finished ones resolved. You can also add, edit, tick off or reopen them yourself. Open threads are always given to the model. Threads that come from a private scene stay private, and they follow that scene's reveals.
+- **Facts.** Small details the model must never forget. Pin one from any message with the 📌 in its `…` menu (it starts from the text you selected), or with `/pin`. Facts pinned from a private message stay private.
+- **Secrets.** The who-knows-what grid.
+
+**Story clock:** set it with `@time Day 4, dawn:` and `@place the stables:` at the start of a message (these combine with the other tags), with `/story-time` and `/story-place`, or with the ✏️ in the Story Memory header. It also updates from each story summary. An optional setting checks it after every reply. The model sees `[Story time: … Location: …]` with every reply.
+
 ## Slash commands
 
 | Command | What it does |
@@ -87,8 +103,12 @@ Turn on **Hide the original messages after saving** to keep the context small. T
 | `/private-reveal Bob` | Bob finds out the latest secret. `at=14` picks the secret containing message 14 |
 | `/private-save` | Summarizes the latest secret into the lorebook. `at=14` picks one |
 | `/memory-save` | Summarizes the public story since the last memory. `at=0-40` sets the range |
-| `/private-timeline` | Opens the timeline |
-| `/who-knows` | Opens the who-knows-what grid |
+| `/memory` | Opens Story Memory. Add a tab name to open it there: `/memory threads` |
+| `/who-knows` | Opens the Secrets tab |
+| `/memory-merge` | Merges the oldest story entries into a chapter now |
+| `/pin Ana is left-handed` | Pins a fact |
+| `/thread Kael owes Bob a favor` | Adds an open thread |
+| `/story-time Day 4, dawn` · `/story-place the stables` | Sets the story clock. With no text, returns it |
 
 ## Settings
 
@@ -96,7 +116,10 @@ All of these are under Extensions → Private Scenes:
 
 - **Leak checker:** on or off, and auto-regenerate.
 - **Lorebook timeline:** auto-save secrets, keywords, hide after saving, always-include secret entries, and the summary instructions.
-- **Story memory:** auto-summarize, every N messages, how many recent messages to leave alone, always-include, and the instructions.
+- **Story memory:** auto-summarize, every N messages, how many recent messages to leave alone, always-include, the instructions, and chapter merging (entries per chapter, how many to keep detailed, chapter instructions).
+- **Characters & threads:** keep sheets up to date, and track threads.
+- **Story clock:** on or off, and the optional per-reply check.
+- **Review:** *Let me review summaries before they are saved*.
 - **Prompt:** the rules text, the active-scene note, the labels, and the rules depth.
 
 ## Limitations
