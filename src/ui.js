@@ -9,7 +9,9 @@ import { refreshSceneEntry } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
 import { addFact, getClock, setVisibility } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
-import { TASKS, sidecarProfiles, testSidecar } from './llm.js';
+import {
+    TASKS, currentSource, modelSidecarProblem, providerModels, sidecarProfiles, sourceName, testSidecar,
+} from './llm.js';
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 
@@ -454,18 +456,32 @@ function addSettingsPanel() {
 
                     <div class="ps-section ps-sidecar">
                         <div class="ps-section-title"><i class="fa-solid fa-microchip"></i> AI sidecar</div>
-                        <small>Use a different, cheaper model for the background work (summaries, leak checks, character sheets…). Your roleplay keeps using your main connection.</small>
-                        <label for="ps_sidecar_profile">Model for background tasks</label>
-                        <div class="ps-sidecar-row">
+                        <small>Use a different, cheaper model for the background work (summaries, leak checks, character sheets…). Your roleplay keeps using your main model.</small>
+                        <div id="ps_sidecar_modes" class="ps-sidecar-modes" role="radiogroup" aria-label="Model for background tasks"></div>
+
+                        <div class="ps-sidecar-panel" data-mode="model">
+                            <div class="ps-sidecar-provider"><i class="fa-solid fa-plug"></i><span id="ps_sidecar_provider"></span></div>
+                            <label for="ps_sidecar_model_list">Model</label>
+                            <select id="ps_sidecar_model_list" class="text_pole"></select>
+                            <label for="ps_sidecar_model">Model ID <small>(pick above, or type any model your provider offers)</small></label>
+                            <input id="ps_sidecar_model" class="text_pole" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. claude-haiku-5-5">
+                            <small id="ps_sidecar_model_hint"></small>
+                        </div>
+
+                        <div class="ps-sidecar-panel" data-mode="profile">
+                            <label for="ps_sidecar_profile">Connection profile</label>
                             <select id="ps_sidecar_profile" class="text_pole"></select>
-                            <div id="ps_sidecar_test" class="menu_button menu_button_icon" role="button" tabindex="0" title="Send a tiny test request"><i class="fa-solid fa-vial"></i><span>Test</span></div>
+                            <small id="ps_sidecar_hint"></small>
                         </div>
-                        <small id="ps_sidecar_hint"></small>
-                        <div class="ps-sidecar-tasks">
-                            <div class="ps-panel-label">Use it for</div>
-                            <div id="ps_sidecar_tasks"></div>
+
+                        <div class="ps-sidecar-on">
+                            <div id="ps_sidecar_test" class="menu_button menu_button_icon" role="button" tabindex="0" title="Send a tiny test request"><i class="fa-solid fa-vial"></i><span>Test the sidecar</span></div>
+                            <div class="ps-sidecar-tasks">
+                                <div class="ps-panel-label">Use it for</div>
+                                <div id="ps_sidecar_tasks"></div>
+                            </div>
+                            <label class="checkbox_label"><input id="ps_sidecar_fallback" type="checkbox"> <span>If it fails, use the main connection instead</span></label>
                         </div>
-                        <label class="checkbox_label"><input id="ps_sidecar_fallback" type="checkbox"> <span>If it fails, use the main connection instead</span></label>
                     </div>
 
                     <div class="ps-section">
@@ -669,34 +685,91 @@ export function initUi() {
 
 // ─── Settings: AI sidecar & prompts ──────────────────────────────────
 
+const SIDECAR_MODES = [
+    ['main', 'fa-equals', 'Same as the roleplay'],
+    ['model', 'fa-microchip', 'Pick a model'],
+    ['profile', 'fa-plug', 'Connection profile'],
+];
+
 /** Fills the profile dropdown (profiles can be added at any time in the Connection Manager). */
 function fillSidecarProfiles() {
     const s = settings();
     const select = $('#ps_sidecar_profile').empty();
     const profiles = sidecarProfiles();
-    select.append(new Option('Same as the roleplay (main connection)', ''));
+    select.append(new Option('Choose a profile…', ''));
     for (const profile of profiles ?? []) {
         select.append(new Option(profile.model ? `${profile.name} — ${profile.model}` : profile.name, profile.id));
     }
     const known = (profiles ?? []).some(p => p.id === s.sidecarProfile);
     if (s.sidecarProfile && !known) select.append(new Option('(profile was deleted)', s.sidecarProfile));
-    select.val(s.sidecarProfile || '');
+    select.val(s.sidecarProfile || '').prop('disabled', profiles === null);
 
-    const hint = $('#ps_sidecar_hint');
-    if (profiles === null) {
-        select.prop('disabled', true);
-        hint.text('Turn on the Connection Manager extension to use a sidecar.');
-    } else if (!profiles.length) {
-        hint.text('Create a connection profile first: open the plug icon, choose a cheaper model, and save it under Connection Profile.');
-    } else {
-        hint.text('Pick a saved connection profile, for example one using Claude Haiku 5.5 or Sonnet 5.5.');
+    $('#ps_sidecar_hint').text(profiles === null
+        ? 'Turn on the Connection Manager extension to use profiles.'
+        : !profiles.length
+            ? 'Save one first: open the plug icon, set up a connection, and save it under Connection Profile. Profiles can use any provider or a local model.'
+            : 'Profiles can use any provider or a local model, separate from your roleplay connection.');
+}
+
+/** Fills the model dropdown from the provider your roleplay is connected to. */
+function fillSidecarModels() {
+    const s = settings();
+    const source = currentSource();
+    const models = providerModels(source);
+    const mainModel = source ? ctx().getChatCompletionModel?.() : '';
+
+    $('#ps_sidecar_provider').text(source
+        ? `Uses your current provider, ${sourceName(source)}, and its API key.`
+        : 'Your roleplay uses a Text Completion connection. Picking a model needs Chat Completion, so use a connection profile instead.');
+
+    const select = $('#ps_sidecar_model_list').empty().prop('disabled', !models.length);
+    select.append(new Option(models.length ? 'Choose a model…' : 'No model list yet', ''));
+    const groups = new Map();
+    for (const model of models) {
+        const label = model.id === mainModel ? `${model.label}  (your roleplay model)` : model.label;
+        const option = new Option(label, model.id);
+        if (model.group) {
+            if (!groups.has(model.group)) groups.set(model.group, $('<optgroup>').attr('label', model.group).appendTo(select));
+            groups.get(model.group).append(option);
+        } else {
+            select.append(option);
+        }
     }
-    $('.ps-sidecar-tasks, #ps_sidecar_test').toggle(!!s.sidecarProfile);
-    $('#ps_sidecar_fallback').closest('label').toggle(!!s.sidecarProfile);
+    select.val(models.some(m => m.id === s.sidecarModel) ? s.sidecarModel : '');
+    $('#ps_sidecar_model').val(s.sidecarModel);
+
+    const problem = s.sidecarModel ? modelSidecarProblem() : '';
+    $('#ps_sidecar_model_hint').toggleClass('ps-warn-text', !!problem).text(problem
+        || (!models.length && source ? 'Connect in the API panel (plug icon) so SillyTavern loads the model list, or type a model ID.' : ''));
+}
+
+/** Shows the panel for the chosen mode. */
+function syncSidecarMode() {
+    const mode = settings().sidecarMode;
+    $('#ps_sidecar_modes input').each(function () {
+        $(this).prop('checked', $(this).val() === mode);
+    });
+    $('.ps-sidecar-panel').each(function () {
+        $(this).toggle($(this).data('mode') === mode);
+    });
+    $('.ps-sidecar-on').toggle(mode !== 'main');
+    if (mode === 'model') fillSidecarModels();
+    if (mode === 'profile') fillSidecarProfiles();
 }
 
 function addSidecarControls() {
     const s = settings();
+    const modes = $('#ps_sidecar_modes');
+    for (const [value, icon, label] of SIDECAR_MODES) {
+        modes.append(radioPill('ps_sidecar_mode', value, icon, label, s.sidecarMode === value, 'ps-kind ps-sidecar-mode'));
+    }
+    modes.on('change', 'input', function () {
+        s.sidecarMode = String($(this).val());
+        s.sidecarModeSet = true;
+        ctx().saveSettingsDebounced();
+        syncSidecarMode();
+    });
+
     const tasks = $('#ps_sidecar_tasks');
     for (const [task, { label }] of Object.entries(TASKS)) {
         const row = $('<label class="checkbox_label"><input type="checkbox"> <span></span></label>');
@@ -707,14 +780,29 @@ function addSidecarControls() {
         });
         tasks.append(row);
     }
-    fillSidecarProfiles();
-    // Refresh when opened, in case profiles were added or renamed meanwhile.
+
+    const chooseModel = (model) => {
+        s.sidecarModel = String(model ?? '').trim();
+        s.sidecarSource = s.sidecarModel ? currentSource() ?? '' : '';
+        ctx().saveSettingsDebounced();
+    };
+    // Refresh lists when opened: the provider, its models, or the profiles may have changed meanwhile.
+    $('#ps_sidecar_model_list').on('focus pointerdown', fillSidecarModels).on('change', function () {
+        if (!$(this).val()) return;
+        chooseModel($(this).val());
+        fillSidecarModels();
+    });
+    $('#ps_sidecar_model').on('input', function () {
+        chooseModel($(this).val());
+    }).on('change', fillSidecarModels);
     $('#ps_sidecar_profile').on('focus pointerdown', fillSidecarProfiles).on('change', function () {
         s.sidecarProfile = String($(this).val() ?? '');
         ctx().saveSettingsDebounced();
-        fillSidecarProfiles();
     });
     $('#ps_sidecar_test').on('click', testSidecar);
+    // Keep the provider line and model list current when the main connection changes.
+    ctx().eventSource.on(ctx().eventTypes.CHATCOMPLETION_SOURCE_CHANGED ?? 'chatcompletion_source_changed', () => settings().sidecarMode === 'model' && fillSidecarModels());
+    syncSidecarMode();
 }
 
 function addPromptFields() {

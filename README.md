@@ -47,14 +47,23 @@ While a scene is running, a glowing bar above the chat box shows who's in it, wi
 
 The extension makes some extra requests in the background: summaries and chapters, leak checks, character sheets, condensing world knowledge, and optionally the clock. You can send these to a cheaper model, while your roleplay keeps using Opus, Fable, or whatever you chat with.
 
-1. In SillyTavern, open the plug icon, connect the cheaper model you want (for example Claude Haiku 5.5 or Sonnet 5.5), and save it under **Connection Profile**. This uses SillyTavern's built-in Connection Manager.
-2. In Extensions → Private Scenes → **AI sidecar**, choose that profile. **Test** sends a tiny request and shows which model answered and how fast.
-3. Under **Use it for**, untick anything you'd rather keep on your main model. Leak checks are the main candidate, since a stronger model notices subtler leaks.
+In Extensions → Private Scenes → **AI sidecar**, choose one of three options:
+
+| Option | What it uses | Setup |
+|---|---|---|
+| **Same as the roleplay** | Your main connection and model | None (the default) |
+| **Pick a model** | Your current provider and API key, with another model, for example Claude Haiku 5.5 or Sonnet 5.5 | Choose from the provider's model list, or type any model ID it offers |
+| **Connection profile** | A saved SillyTavern connection profile: any provider, or a local model | Save a profile first: open the plug icon, set up the connection, and save it under Connection Profile |
+
+Then:
+- **Test the sidecar** sends a tiny request and shows which model answered and how fast.
+- **Use it for** lets you keep some tasks on your main model. Leak checks are the main candidate, since a stronger model notices subtler leaks.
 
 Details:
+- *Pick a model* needs a Chat Completion connection. If your roleplay uses Text Completion (most local backends), use a connection profile instead.
+- If you switch providers after picking a model, the extension notices that the model belongs to the old provider. It warns you once and uses your main connection until you pick a new one.
 - Sidecar requests skip your roleplay's preset, so your RP instructions and jailbreaks don't bleed into a summary request.
 - If the sidecar fails, the main connection is used instead, with one warning. Turn this off if you'd rather it fail.
-- With no sidecar chosen, everything uses your main connection, as before.
 
 ### Prompts written for smaller models
 
@@ -154,7 +163,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 
 All of these are under Extensions → Private Scenes:
 
-- **AI sidecar:** the connection profile for background tasks, which tasks use it, and the fallback.
+- **AI sidecar:** same model, a model you pick, or a connection profile for background tasks; which tasks use it; and the fallback.
 - **AI prompts for background tasks:** every task's instructions, each with a reset button.
 - **Common knowledge:** condense marked messages into a short line, or use their text as is.
 - **Leak checker:** on or off, and auto-regenerate.

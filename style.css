@@ -2084,21 +2084,59 @@ input[type='checkbox'].ps-list-check:focus-visible {
 
 /* ── 15. AI sidecar & prompt editor ──────────────────────────────── */
 
-.ps-sidecar-row {
+.ps-sidecar-modes {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
+    margin: 4px 0;
 }
 
-.ps-sidecar-row select {
-    flex: 1;
-    min-width: 0;
+/* Sidecar mode pills use the accent color rather than the world-knowledge blue. */
+.ps-sidecar-mode .ps-radio-body > i {
+    color: var(--ps-accent);
+}
+
+.ps-sidecar-mode input:checked + .ps-radio-body {
+    background: var(--ps-accent-soft);
+    border-color: var(--ps-accent-line);
+}
+
+.ps-sidecar-panel,
+.ps-sidecar-on {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ps-sidecar-panel select,
+.ps-sidecar-panel input.text_pole {
+    width: 100%;
     margin: 0;
 }
 
-.ps-sidecar-row .menu_button {
-    flex-shrink: 0;
-    margin: 0;
+.ps-sidecar-panel label small {
+    font-weight: 400;
+}
+
+.ps-sidecar-provider {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--ps-radius-sm);
+    font-size: 0.88em;
+    background: var(--ps-accent-soft);
+    border: 1px solid color-mix(in srgb, var(--ps-accent) 30%, transparent);
+}
+
+.ps-sidecar-provider i {
+    margin-top: 3px;
+    color: var(--ps-accent);
+}
+
+#ps_sidecar_test {
+    align-self: flex-start;
+    margin: 4px 0;
 }
 
 .ps-sidecar-tasks {
@@ -2134,7 +2172,8 @@ input[type='checkbox'].ps-list-check:focus-visible {
 }
 
 @media (pointer: coarse) {
-    .ps-sidecar-row select {
+    .ps-sidecar-panel select,
+    .ps-sidecar-panel input.text_pole {
         min-height: var(--ps-tap);
         font-size: max(16px, 1em);
     }

@@ -27,6 +27,9 @@ export const BOOK_KEY = 'world_info';
 export const defaultSettings = Object.freeze({
     ...PROMPTS,
     // AI sidecar: a connection profile (usually a cheaper model) for background tasks.
+    sidecarMode: 'main',
+    sidecarModel: '',
+    sidecarSource: '',
     sidecarProfile: '',
     sidecarTasks: { summary: true, leak: true, sheets: true, condense: true, clock: true },
     sidecarFallback: true,
@@ -92,6 +95,8 @@ export function settings() {
     if (!upgraded) {
         upgraded = true;
         upgradePrompts(saved);
+        // 0.6.0 had only profiles: a chosen profile means profile mode.
+        if (saved.sidecarMode === 'main' && saved.sidecarProfile && !saved.sidecarModeSet) saved.sidecarMode = 'profile';
     }
     return saved;
 }
