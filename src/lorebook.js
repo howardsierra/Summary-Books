@@ -9,6 +9,7 @@ import {
 } from './core.js';
 import { extrasInstructions, parseSummary } from './extract.js';
 import { applyExtras, getClock, refreshListEntries, updateSheets, visibleThreads } from './memory.js';
+import { llm } from './llm.js';
 
 // world_info_position.after (after character definitions)
 const WI_AFTER_CHAR = 1;
@@ -96,7 +97,7 @@ async function summarize(systemPrompt, text, { threadMembers, clock = false } = 
         threads: threads?.map(t => t.text) ?? null,
         clock: clock && s.clockEnabled ? getClock() : null,
     });
-    const parsed = parseSummary(await ctx().generateRaw({ systemPrompt: instructions, prompt: text }));
+    const parsed = parseSummary(await llm('summary', { systemPrompt: instructions, prompt: text }));
     if (!parsed.summary) throw new Error('The model returned an empty summary.');
     return { parsed, threadIds: threads?.map(t => t.id) ?? [] };
 }

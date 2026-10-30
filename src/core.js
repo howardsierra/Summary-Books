@@ -4,6 +4,8 @@
 // Chat metadata (chatMetadata.privateScenes) holds the active scene, the names used,
 // reveals per scene, and the timeline records for the lorebook.
 
+import { PROMPTS, upgradePrompts } from './prompts.js';
+
 export const MODULE = 'privateScenes';
 export const FLAG = 'private_scene';
 export const LEAK = 'ps_leak';
@@ -23,6 +25,11 @@ export const MID = 'ps_mid';
 export const BOOK_KEY = 'world_info';
 
 export const defaultSettings = Object.freeze({
+    ...PROMPTS,
+    // AI sidecar: a connection profile (usually a cheaper model) for background tasks.
+    sidecarProfile: '',
+    sidecarTasks: { summary: true, leak: true, sheets: true, condense: true, clock: true },
+    sidecarFallback: true,
     enabled: true,
     showBadges: true,
     inlineTags: true,
@@ -41,16 +48,10 @@ export const defaultSettings = Object.freeze({
     entryConstant: false,
     entryOrder: 200,
     keywords: true,
-    summaryPrompt: 'You are writing a memory entry for an ongoing roleplay. Summarize the PRIVATE scene below between {{members}}. '
-        + 'Write 2 to 5 sentences in past tense. Keep every secret, confession, promise, plan, and change in the relationship. '
-        + 'Use names instead of pronouns. Output only the summary, with no preamble.',
     autoMemory: false,
     memoryEvery: 20,
     memoryKeepRecent: 4,
     memoryConstant: false,
-    memoryPrompt: 'You are writing a memory entry for an ongoing roleplay. Summarize the part of the story below. '
-        + 'Write 3 to 6 sentences in past tense. Keep important events, decisions, promises, discoveries, and changes in relationships. '
-        + 'Use names instead of pronouns. Output only the summary, with no preamble.',
     leakCheck: true,
     leakAutoRegenerate: false,
     commonLabelStart: '[COMMON KNOWLEDGE ({{kind}}) — every character knows this, including those who were not there]',
@@ -63,9 +64,6 @@ export const defaultSettings = Object.freeze({
     consolidate: true,
     consolidateEvery: 5,
     consolidateKeep: 3,
-    chapterPrompt: 'Combine these consecutive parts of a roleplay story into one shorter summary of 4 to 7 sentences in past tense. '
-        + 'Keep major events, decisions, changes in relationships, and anything still unresolved. Drop minor details. '
-        + 'Use names instead of pronouns. Output only the summary, with no preamble.',
     trackThreads: true,
     autoSheets: true,
     clockEnabled: true,
@@ -81,13 +79,21 @@ export const hooks = {
     openMemory: (_tab) => { },
 };
 
+let upgraded = false;
+
 export function settings() {
     const all = ctx().extensionSettings;
     all[MODULE] ??= {};
+    const saved = all[MODULE];
     for (const [key, value] of Object.entries(defaultSettings)) {
-        if (all[MODULE][key] === undefined) all[MODULE][key] = value;
+        // Copy objects so editing saved settings never changes the defaults.
+        if (saved[key] === undefined) saved[key] = typeof value === 'object' && value ? structuredClone(value) : value;
     }
-    return all[MODULE];
+    if (!upgraded) {
+        upgraded = true;
+        upgradePrompts(saved);
+    }
+    return saved;
 }
 
 export function chatState() {

@@ -1,12 +1,8 @@
 // Leak checker: after a public reply, asks the model whether a character who
 // isn't in on a secret mentions, hints at, or acts on it.
 
+import { llm } from './llm.js';
 import { LEAK, chatState, ctx, findScenes, formatKnowers, getFlag, hooks, revealedNames, saveSoon, settings } from './core.js';
-
-const CHECK_PROMPT = 'You are a continuity checker for a roleplay. Each SECRET below is known only to the characters listed with it. '
-    + 'Read the NEW REPLY and decide whether any character who is NOT listed for a secret mentions it, hints at it, reacts to it, '
-    + 'or acts on knowledge of it. Characters who are listed may do anything. Ordinary public events are not leaks.\n'
-    + 'Answer with exactly one line, either:\nOK\nor:\nLEAK <secret number>: <short reason naming the character>';
 
 const MAX_SECRET_CHARS = 1500;
 const MAX_AUTO_RETRIES = 2;
@@ -59,7 +55,7 @@ export async function checkLeak(messageId) {
         const prompt = 'SECRETS:\n'
             + secrets.map((x, i) => `#${i + 1} (known only to: ${x.knowers}): ${x.text}`).join('\n\n')
             + `\n\nNEW REPLY (by ${message.name}):\n${text}`;
-        const verdict = parseVerdict(await ctx().generateRaw({ systemPrompt: CHECK_PROMPT, prompt }));
+        const verdict = parseVerdict(await llm('leak', { systemPrompt: settings().leakPrompt, prompt }));
 
         // The message may have been edited, swiped or deleted meanwhile.
         if (ctx().chat[messageId] !== message || message.mes !== text) return;

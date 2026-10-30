@@ -9,6 +9,8 @@ import { refreshSceneEntry } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
 import { addFact, getClock, setVisibility } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
+import { TASKS, sidecarProfiles, testSidecar } from './llm.js';
+import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 
 // ─── Chips ───────────────────────────────────────────────────────────
@@ -450,6 +452,22 @@ function addSettingsPanel() {
                         </ul>
                     </div>
 
+                    <div class="ps-section ps-sidecar">
+                        <div class="ps-section-title"><i class="fa-solid fa-microchip"></i> AI sidecar</div>
+                        <small>Use a different, cheaper model for the background work (summaries, leak checks, character sheets…). Your roleplay keeps using your main connection.</small>
+                        <label for="ps_sidecar_profile">Model for background tasks</label>
+                        <div class="ps-sidecar-row">
+                            <select id="ps_sidecar_profile" class="text_pole"></select>
+                            <div id="ps_sidecar_test" class="menu_button menu_button_icon" role="button" tabindex="0" title="Send a tiny test request"><i class="fa-solid fa-vial"></i><span>Test</span></div>
+                        </div>
+                        <small id="ps_sidecar_hint"></small>
+                        <div class="ps-sidecar-tasks">
+                            <div class="ps-panel-label">Use it for</div>
+                            <div id="ps_sidecar_tasks"></div>
+                        </div>
+                        <label class="checkbox_label"><input id="ps_sidecar_fallback" type="checkbox"> <span>If it fails, use the main connection instead</span></label>
+                    </div>
+
                     <div class="ps-section">
                         <div class="ps-section-title"><i class="fa-solid fa-masks-theater"></i> This chat</div>
                         <div id="ps_scene_status"></div>
@@ -489,10 +507,6 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_keywords" type="checkbox"> <span>Ask for keywords (places, objects, events) as extra triggers</span></label>
                         <label class="checkbox_label"><input id="ps_hide_after_save" type="checkbox"> <span>Hide the original messages after saving</span></label>
                         <label class="checkbox_label"><input id="ps_entry_constant" type="checkbox"> <span>Always include secret entries (otherwise when triggered)</span></label>
-                        <details class="ps-advanced">
-                            <summary>Customize the secret summary instructions</summary>
-                            <textarea id="ps_summary_prompt" class="text_pole textarea_compact" rows="4" aria-label="Secret summary instructions"></textarea>
-                        </details>
                     </div>
 
                     <div class="ps-section">
@@ -510,10 +524,6 @@ function addSettingsPanel() {
                         </div>
                         <label class="checkbox_label"><input id="ps_memory_constant" type="checkbox"> <span>Always include story entries (otherwise when triggered)</span></label>
                         <small>Private messages are never included in story memory.</small>
-                        <details class="ps-advanced">
-                            <summary>Customize the story summary instructions</summary>
-                            <textarea id="ps_memory_prompt" class="text_pole textarea_compact" rows="4" aria-label="Story summary instructions"></textarea>
-                        </details>
                         <label class="checkbox_label"><input id="ps_consolidate" type="checkbox"> <span>Merge old story entries into chapters (and chapters into arcs)</span></label>
                         <div class="ps-grid-2">
                             <div>
@@ -525,10 +535,6 @@ function addSettingsPanel() {
                                 <input id="ps_consolidate_keep" class="text_pole" type="number" min="0" max="20">
                             </div>
                         </div>
-                        <details class="ps-advanced">
-                            <summary>Customize the chapter instructions</summary>
-                            <textarea id="ps_chapter_prompt" class="text_pole textarea_compact" rows="3" aria-label="Chapter instructions"></textarea>
-                        </details>
                     </div>
 
                     <div class="ps-section">
@@ -536,6 +542,14 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_auto_sheets" type="checkbox"> <span>Keep character sheets and relationships up to date from story memory</span></label>
                         <label class="checkbox_label"><input id="ps_threads" type="checkbox"> <span>Track open threads (promises, plans, open questions)</span></label>
                         <small>Character sheets only use public story memory, so they never give away a secret.</small>
+                    </div>
+
+                    <div class="ps-section">
+                        <details class="ps-advanced ps-advanced-section">
+                            <summary><i class="fa-solid fa-wand-magic-sparkles"></i> AI prompts for background tasks</summary>
+                            <small>The instructions sent to the sidecar (or main model) for each task. They are written so that smaller models follow them; keep the answer format the same when you edit them.</small>
+                            <div id="ps_prompt_fields"></div>
+                        </details>
                     </div>
 
                     <div class="ps-section">
@@ -593,6 +607,7 @@ function addSettingsPanel() {
         '#ps_clock_enabled': 'clockEnabled',
         '#ps_clock_auto': 'clockAutoTrack',
         '#ps_world_condense': 'worldCondense',
+        '#ps_sidecar_fallback': 'sidecarFallback',
     };
     const numbers = new Set(['rulesDepth', 'memoryEvery', 'memoryKeepRecent', 'consolidateEvery', 'consolidateKeep']);
     const fields = {
@@ -601,19 +616,16 @@ function addSettingsPanel() {
         '#ps_rules_depth': 'rulesDepth',
         '#ps_label_start': 'labelStart',
         '#ps_label_end': 'labelEnd',
-        '#ps_summary_prompt': 'summaryPrompt',
-        '#ps_memory_prompt': 'memoryPrompt',
         '#ps_memory_every': 'memoryEvery',
         '#ps_memory_keep': 'memoryKeepRecent',
         '#ps_consolidate_every': 'consolidateEvery',
         '#ps_consolidate_keep': 'consolidateKeep',
-        '#ps_chapter_prompt': 'chapterPrompt',
         '#ps_common_rules': 'commonRules',
         '#ps_common_start': 'commonLabelStart',
         '#ps_rumor_start': 'rumorLabelStart',
         '#ps_common_end': 'commonLabelEnd',
     };
-    const textDefaults = ['rules', 'sceneRules', 'labelStart', 'labelEnd', 'summaryPrompt', 'memoryPrompt', 'chapterPrompt', 'rulesDepth',
+    const textDefaults = ['rules', 'sceneRules', 'labelStart', 'labelEnd', 'rulesDepth',
         'commonRules', 'commonLabelStart', 'rumorLabelStart', 'commonLabelEnd'];
     const load = () => {
         for (const [selector, key] of Object.entries(checkboxes)) $(selector).prop('checked', s[key]);
@@ -639,6 +651,8 @@ function addSettingsPanel() {
         ctx().saveSettingsDebounced();
         load();
     });
+    addSidecarControls();
+    addPromptFields();
     $('#ps_start_scene').on('click', onSceneButtonClick);
     $('#ps_end_scene').on('click', endScene);
     $('#ps_open_timeline').on('click', () => openMemory('timeline'));
@@ -651,4 +665,81 @@ export function initUi() {
     addSceneBar();
     addWandMenuItems();
     addSettingsPanel();
+}
+
+// ─── Settings: AI sidecar & prompts ──────────────────────────────────
+
+/** Fills the profile dropdown (profiles can be added at any time in the Connection Manager). */
+function fillSidecarProfiles() {
+    const s = settings();
+    const select = $('#ps_sidecar_profile').empty();
+    const profiles = sidecarProfiles();
+    select.append(new Option('Same as the roleplay (main connection)', ''));
+    for (const profile of profiles ?? []) {
+        select.append(new Option(profile.model ? `${profile.name} — ${profile.model}` : profile.name, profile.id));
+    }
+    const known = (profiles ?? []).some(p => p.id === s.sidecarProfile);
+    if (s.sidecarProfile && !known) select.append(new Option('(profile was deleted)', s.sidecarProfile));
+    select.val(s.sidecarProfile || '');
+
+    const hint = $('#ps_sidecar_hint');
+    if (profiles === null) {
+        select.prop('disabled', true);
+        hint.text('Turn on the Connection Manager extension to use a sidecar.');
+    } else if (!profiles.length) {
+        hint.text('Create a connection profile first: open the plug icon, choose a cheaper model, and save it under Connection Profile.');
+    } else {
+        hint.text('Pick a saved connection profile, for example one using Claude Haiku 5.5 or Sonnet 5.5.');
+    }
+    $('.ps-sidecar-tasks, #ps_sidecar_test').toggle(!!s.sidecarProfile);
+    $('#ps_sidecar_fallback').closest('label').toggle(!!s.sidecarProfile);
+}
+
+function addSidecarControls() {
+    const s = settings();
+    const tasks = $('#ps_sidecar_tasks');
+    for (const [task, { label }] of Object.entries(TASKS)) {
+        const row = $('<label class="checkbox_label"><input type="checkbox"> <span></span></label>');
+        row.find('span').text(label);
+        row.find('input').prop('checked', s.sidecarTasks?.[task] !== false).on('change', function () {
+            s.sidecarTasks = { ...s.sidecarTasks, [task]: !!$(this).prop('checked') };
+            ctx().saveSettingsDebounced();
+        });
+        tasks.append(row);
+    }
+    fillSidecarProfiles();
+    // Refresh when opened, in case profiles were added or renamed meanwhile.
+    $('#ps_sidecar_profile').on('focus pointerdown', fillSidecarProfiles).on('change', function () {
+        s.sidecarProfile = String($(this).val() ?? '');
+        ctx().saveSettingsDebounced();
+        fillSidecarProfiles();
+    });
+    $('#ps_sidecar_test').on('click', testSidecar);
+}
+
+function addPromptFields() {
+    const s = settings();
+    const container = $('#ps_prompt_fields');
+    for (const [key, label, note] of PROMPT_FIELDS) {
+        const field = $(`
+            <div class="ps-prompt-field">
+                <div class="ps-prompt-head"><label></label><div class="menu_button menu_button_icon ps-btn ps-btn-icon" role="button" tabindex="0" title="Restore the default"><i class="fa-solid fa-rotate-left"></i></div></div>
+                <small></small>
+                <textarea class="text_pole textarea_compact" rows="6"></textarea>
+            </div>`);
+        const id = `ps_prompt_${key}`;
+        field.find('label').text(label).attr('for', id);
+        field.find('small').text(note).toggle(!!note);
+        const area = field.find('textarea').attr('id', id).val(s[key]);
+        area.on('input', () => {
+            s[key] = String(area.val());
+            ctx().saveSettingsDebounced();
+        });
+        field.find('.ps-btn').attr('aria-label', `Restore the default ${label} prompt`).on('click', () => {
+            s[key] = PROMPTS[key];
+            area.val(PROMPTS[key]);
+            ctx().saveSettingsDebounced();
+        });
+        container.append(field);
+    }
 }

@@ -4,6 +4,7 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 
 - **Private messages.** Mark messages as private between certain characters, so the narrator knows those events happened out of everyone else's sight.
 - **Common knowledge.** Mark news articles, announcements, rumors or famous facts as things *every* character knows, NPCs included, even if they weren't there.
+- **AI sidecar.** Run all the background work on a cheaper model while your roleplay keeps using your main one.
 - **Leak checker.** Warns you when a reply lets a character know something they weren't told, and can regenerate the reply automatically.
 - **Reveals.** Record when someone finds out a secret later. From then on, they're treated as knowing it.
 - **Who knows what.** A grid of every secret and every character.
@@ -41,6 +42,23 @@ The extension also adds a short rules note telling the model that unlisted chara
 | `/private at=12-18 Ana, Kael` | Flags a range of messages after the fact |
 
 While a scene is running, a glowing bar above the chat box shows who's in it, with buttons to edit it, open the timeline, or end it.
+
+## AI sidecar: a cheaper model for background work
+
+The extension makes some extra requests in the background: summaries and chapters, leak checks, character sheets, condensing world knowledge, and optionally the clock. You can send these to a cheaper model, while your roleplay keeps using Opus, Fable, or whatever you chat with.
+
+1. In SillyTavern, open the plug icon, connect the cheaper model you want (for example Claude Haiku 5.5 or Sonnet 5.5), and save it under **Connection Profile**. This uses SillyTavern's built-in Connection Manager.
+2. In Extensions → Private Scenes → **AI sidecar**, choose that profile. **Test** sends a tiny request and shows which model answered and how fast.
+3. Under **Use it for**, untick anything you'd rather keep on your main model. Leak checks are the main candidate, since a stronger model notices subtler leaks.
+
+Details:
+- Sidecar requests skip your roleplay's preset, so your RP instructions and jailbreaks don't bleed into a summary request.
+- If the sidecar fails, the main connection is used instead, with one warning. Turn this off if you'd rather it fail.
+- With no sidecar chosen, everything uses your main connection, as before.
+
+### Prompts written for smaller models
+
+Every background task has its own instructions: a clear job, explicit rules, an exact answer format, and an example where the format matters. This keeps cheaper models on track. You can edit all of them under **AI prompts for background tasks**, and each has a reset button. Keep the answer format the same when you edit, because the extension reads those labels. If you never changed the old summary prompts, they were upgraded to the new versions automatically.
 
 ## Common knowledge: news, announcements, rumors
 
@@ -136,6 +154,8 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 
 All of these are under Extensions → Private Scenes:
 
+- **AI sidecar:** the connection profile for background tasks, which tasks use it, and the fallback.
+- **AI prompts for background tasks:** every task's instructions, each with a reset button.
 - **Common knowledge:** condense marked messages into a short line, or use their text as is.
 - **Leak checker:** on or off, and auto-regenerate.
 - **Lorebook timeline:** auto-save secrets, keywords, hide after saving, always-include secret entries, and the summary instructions.

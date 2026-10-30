@@ -9,6 +9,7 @@ import {
 } from './core.js';
 import { deleteEntry, getBook, upsertEntry } from './lorebook.js';
 import { parseSummary } from './extract.js';
+import { llm } from './llm.js';
 
 const lastId = () => Math.max(0, ctx().chat.length - 1);
 
@@ -190,10 +191,6 @@ export function setClock({ time, place }) {
     return changed;
 }
 
-const CLOCK_PROMPT = 'You track the in-story time and place of a roleplay. Read the LATEST MESSAGES and reply with exactly two lines:\n'
-    + 'TIME: <the current in-story time, for example "Day 3, evening">\nPLACE: <the current location>\n'
-    + 'Repeat the previous value when it did not change.';
-
 /** Optional per-reply tracking: asks the model where and when the story is now. */
 export async function trackClock(messageId) {
     const s = settings();
@@ -202,8 +199,8 @@ export async function trackClock(messageId) {
     const recent = chat.slice(Math.max(0, messageId - 1), messageId + 1).map(m => `${m.name}: ${m.mes}`).join('\n\n');
     const clock = getClock();
     try {
-        const answer = await ctx().generateRaw({
-            systemPrompt: CLOCK_PROMPT,
+        const answer = await llm('clock', {
+            systemPrompt: s.clockPrompt,
             prompt: `Previous time: ${clock.time || 'unknown'}\nPrevious place: ${clock.place || 'unknown'}\n\nLATEST MESSAGES:\n${recent}`,
         });
         const parsed = parseSummary(answer);
@@ -242,16 +239,6 @@ export async function applyExtras(parsed, { threadIds = [], members = null, scen
 }
 
 // ─── Character sheets & relationships ────────────────────────────────
-
-const SHEET_PROMPT = 'You keep character sheets for an ongoing roleplay up to date. Read the NEW EVENTS and update the sheet of every '
-    + 'character whose condition or relationships changed. Add a sheet for an important named character who has none yet. '
-    + 'Do not invent anything that is not in the text.\n'
-    + 'For each changed character, write a block:\n'
-    + '=== <Name>\n'
-    + 'STATE: <1 to 3 sentences on their current condition, mood, goals, and notable possessions>\n'
-    + 'REL <Other name>: <a few words on how they currently relate to that character>\n'
-    + 'Write one REL line for every relationship that exists, not only the changed ones. '
-    + 'If nothing changed for anyone, write only: NONE';
 
 const sheetKey = (name) => name.trim().toLowerCase();
 
@@ -346,8 +333,8 @@ export async function updateSheets(text, { names = null, at = lastId(), quiet = 
     sheetsBusy.add(busyKey);
     hooks.changed();
     try {
-        const answer = await ctx().generateRaw({
-            systemPrompt: SHEET_PROMPT,
+        const answer = await llm('sheets', {
+            systemPrompt: settings().sheetPrompt,
             prompt: (names ? `Only update these characters: ${names.join(', ')}\n\n` : '')
                 + `Known characters: ${known.join(', ') || 'none yet'}\n\nCURRENT SHEETS:\n${current.join('\n\n') || 'none'}\n\nNEW EVENTS:\n${text}`,
         });
@@ -413,13 +400,6 @@ export const hasPrivateLists = () => chatState().facts.some(x => x.members?.leng
 
 // ─── World knowledge (common knowledge, news, rumors) ────────────────
 
-const CONDENSE_PROMPT = {
-    rumor: 'Condense this rumor from a roleplay into 1 or 2 sentences describing what people are saying. '
-        + 'Keep names and claims, and make clear it is a rumor. Output only the sentences.',
-    other: 'Condense this {{kind}} from a roleplay into 1 or 2 sentences stating what everyone now knows. '
-        + 'Keep names, dates, and claims. Output only the sentences.',
-};
-
 /** World items being condensed right now (by id). */
 export const condensing = new Set();
 
@@ -459,8 +439,9 @@ async function condense(message, kind) {
     const text = String(message.mes ?? '').trim();
     if (!settings().worldCondense) return text.length > 600 ? `${text.slice(0, 600)}…` : text;
     const label = COMMON_KINDS[kind].label.toLowerCase();
-    const prompt = (kind === 'rumor' ? CONDENSE_PROMPT.rumor : CONDENSE_PROMPT.other).replace('{{kind}}', label);
-    const answer = String(await ctx().generateRaw({ systemPrompt: prompt, prompt: text }) ?? '').trim();
+    const s = settings();
+    const prompt = (kind === 'rumor' ? s.rumorPrompt : s.condensePrompt).replaceAll('{{kind}}', label);
+    const answer = String(await llm('condense', { systemPrompt: prompt, prompt: text }) ?? '').trim();
     return answer || (text.length > 600 ? `${text.slice(0, 600)}…` : text);
 }
 
