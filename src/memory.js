@@ -4,7 +4,8 @@
 // (one per character for sheets).
 
 import {
-    chatState, ctx, formatTemplate, hooks, membersKey, newId, parseNames, revealedNames, settings,
+    COMMON_KINDS, MID, chatState, commonKind, ctx, ensureMid, flagMessages, formatTemplate, getCommon, hashText, hooks,
+    membersKey, newId, parseNames, revealedNames, saveSoon, setCommon, settings,
 } from './core.js';
 import { deleteEntry, getBook, upsertEntry } from './lorebook.js';
 import { parseSummary } from './extract.js';
@@ -409,3 +410,145 @@ export function relationshipList() {
 /** True when private facts or threads exist, so the rules prompt is needed. */
 export const hasPrivateLists = () => chatState().facts.some(x => x.members?.length)
     || chatState().threads.some(x => x.status === 'open' && x.members?.length);
+
+// ─── World knowledge (common knowledge, news, rumors) ────────────────
+
+const CONDENSE_PROMPT = {
+    rumor: 'Condense this rumor from a roleplay into 1 or 2 sentences describing what people are saying. '
+        + 'Keep names and claims, and make clear it is a rumor. Output only the sentences.',
+    other: 'Condense this {{kind}} from a roleplay into 1 or 2 sentences stating what everyone now knows. '
+        + 'Keep names, dates, and claims. Output only the sentences.',
+};
+
+/** World items being condensed right now (by id). */
+export const condensing = new Set();
+
+const positionOf = (mid) => ctx().chat.findIndex(m => m.extra?.[MID] === mid);
+
+/**
+ * How a world item relates to its message now:
+ * 'ok', 'changed' (the message text changed), or 'gone' (deleted).
+ */
+export function worldStatus(item) {
+    if (!item.sourceMid) return 'ok';
+    const index = positionOf(item.sourceMid);
+    if (index === -1) return 'gone';
+    return hashText(ctx().chat[index].mes ?? '') === item.hash ? 'ok' : 'changed';
+}
+
+/** Items whose message still exists but is no longer marked common (made private or normal). */
+function isWithdrawn(item) {
+    const index = item.sourceMid ? positionOf(item.sourceMid) : -1;
+    return index !== -1 && !getCommon(ctx().chat[index]);
+}
+
+async function writeWorldEntry() {
+    const items = chatState().world.filter(item => !isWithdrawn(item));
+    const content = items.length
+        ? ['Common knowledge: every character in the world knows these, including characters who were not there.',
+            ...items.map(item => `- ${item.kind === 'rumor' ? 'Rumor (may not be true)' : COMMON_KINDS[item.kind].label}: ${item.text}`)].join('\n')
+        : '';
+    await writeListEntry('world', content, {
+        comment: '🌍 World knowledge',
+        order: Number(settings().entryOrder) - 60,
+    });
+}
+
+/** Condenses a message into a short line for the world entry (or uses its text when condensing is off). */
+async function condense(message, kind) {
+    const text = String(message.mes ?? '').trim();
+    if (!settings().worldCondense) return text.length > 600 ? `${text.slice(0, 600)}…` : text;
+    const label = COMMON_KINDS[kind].label.toLowerCase();
+    const prompt = (kind === 'rumor' ? CONDENSE_PROMPT.rumor : CONDENSE_PROMPT.other).replace('{{kind}}', label);
+    const answer = String(await ctx().generateRaw({ systemPrompt: prompt, prompt: text }) ?? '').trim();
+    return answer || (text.length > 600 ? `${text.slice(0, 600)}…` : text);
+}
+
+/** Creates or refreshes the world item for a message. */
+async function upsertWorldItem(message, kind) {
+    const world = chatState().world;
+    const mid = ensureMid(message);
+    let item = world.find(x => x.sourceMid === mid);
+    if (!item) {
+        item = { id: newId('world'), sourceMid: mid, createdAt: Date.now() };
+        world.push(item);
+    }
+    Object.assign(item, { kind: commonKind(kind), hash: hashText(message.mes ?? '') });
+    item.text ??= String(message.mes ?? '').slice(0, 200);
+    condensing.add(item.id);
+    hooks.changed();
+    try {
+        item.text = await condense(message, item.kind);
+    } catch (error) {
+        report(error, 'could not condense the message');
+    } finally {
+        condensing.delete(item.id);
+    }
+}
+
+/**
+ * Sets who knows about messages:
+ *  { mode: 'common', kind } — every character in the world,
+ *  { mode: 'normal' }       — whoever was there (the default),
+ *  { mode: 'private', members } — only these characters.
+ */
+export async function setVisibility(ids, visibility) {
+    const chat = ctx().chat;
+    const messages = ids.map(id => chat[id]).filter(Boolean);
+    if (visibility.mode === 'common') {
+        messages.forEach(message => setCommon(message, visibility.kind));
+        saveSoon();
+        hooks.changed();
+        for (const message of messages) await upsertWorldItem(message, visibility.kind);
+    } else {
+        messages.forEach(message => setCommon(message, null));
+        flagMessages(ids, visibility.mode === 'private' ? visibility.members : []);
+        const mids = new Set(messages.map(m => m.extra?.[MID]).filter(Boolean));
+        chatState().world = chatState().world.filter(item => !mids.has(item.sourceMid));
+    }
+    await saveList(writeWorldEntry);
+    await ctx().saveMetadata();
+}
+
+/** Re-condenses an item from its (changed) message. */
+export async function refreshWorldItem(id) {
+    const item = chatState().world.find(x => x.id === id);
+    const index = item ? positionOf(item.sourceMid) : -1;
+    if (index === -1) return;
+    await upsertWorldItem(ctx().chat[index], item.kind);
+    await saveList(writeWorldEntry);
+    await ctx().saveMetadata();
+}
+
+export async function editWorldItem(id, text, kind = null) {
+    const item = chatState().world.find(x => x.id === id);
+    if (!item || !String(text ?? '').trim()) return;
+    item.text = String(text).trim();
+    if (kind) item.kind = commonKind(kind);
+    await saveList(writeWorldEntry);
+    await ctx().saveMetadata();
+}
+
+/** Adds world knowledge that isn't tied to a message (typed in by hand). */
+export async function addWorldText(text, kind = 'common') {
+    text = String(text ?? '').trim();
+    if (!text) return;
+    chatState().world.push({ id: newId('world'), kind: commonKind(kind), text, sourceMid: null, createdAt: Date.now() });
+    await saveList(writeWorldEntry);
+    await ctx().saveMetadata();
+}
+
+/** Removes an item and un-marks its message, if the message still exists. */
+export async function removeWorldItem(id) {
+    const state = chatState();
+    const item = state.world.find(x => x.id === id);
+    if (!item) return;
+    const index = item.sourceMid ? positionOf(item.sourceMid) : -1;
+    if (index !== -1) setCommon(ctx().chat[index], null);
+    state.world = state.world.filter(x => x.id !== id);
+    saveSoon();
+    await saveList(writeWorldEntry);
+    await ctx().saveMetadata();
+}
+
+export const hasCommonKnowledge = () => chatState().world.length > 0;

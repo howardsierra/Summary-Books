@@ -3,6 +3,7 @@
 A SillyTavern extension for keeping secrets in a story, built for **one narrator card that plays every character**.
 
 - **Private messages.** Mark messages as private between certain characters, so the narrator knows those events happened out of everyone else's sight.
+- **Common knowledge.** Mark news articles, announcements, rumors or famous facts as things *every* character knows, NPCs included, even if they weren't there.
 - **Leak checker.** Warns you when a reply lets a character know something they weren't told, and can regenerate the reply automatically.
 - **Reveals.** Record when someone finds out a secret later. From then on, they're treated as knowing it.
 - **Who knows what.** A grid of every secret and every character.
@@ -40,6 +41,26 @@ The extension also adds a short rules note telling the model that unlisted chara
 | `/private at=12-18 Ana, Kael` | Flags a range of messages after the fact |
 
 While a scene is running, a glowing bar above the chat box shows who's in it, with buttons to edit it, open the timeline, or end it.
+
+## Common knowledge: news, announcements, rumors
+
+Every message has one of three levels of "who knows", set with the 🕵️ button in its `…` menu:
+
+| Choice | Who knows | Looks like |
+|---|---|---|
+| **Everyone** | Every character in the world, NPCs included, even ones who weren't there | Sky-blue tint (rumors: pink) |
+| **Who was there** | The characters present. This is the usual for any message | No tint |
+| **Only…** | Just the characters you pick (private) | Violet tint |
+
+When you choose **Everyone**, you also pick what kind it is: 🌍 Common knowledge, 📰 News, 📣 Announcement, or 💬 Rumor. A rumor means everyone has heard it, but it may not be true. This suits celebrity roleplays with generated news articles, public announcements, gossip, or anything famous in your world.
+
+You can also start a message with **`@news:`**, **`@rumor:`**, **`@announcement:`** or **`@common:`**, or use `/common kind=news at=12`.
+
+What happens next:
+- The model sees the message wrapped in `[COMMON KNOWLEDGE (News) — every character knows this, including those who were not there]` (or a `[RUMOR …]` label), with a short rule saying anyone may mention it.
+- The message is condensed into one or two sentences and added to an always-included **🌍 World knowledge** lorebook entry, so it's remembered after it scrolls out of the chat. Turning off *Condense* uses the message text instead.
+- Story Memory → **Knowledge** lists them all. You can edit each line, update it when its message was edited, remove it, or add world knowledge by hand.
+- Switching a message to *Who was there* or *Only…* takes it back out of World knowledge. A `@news:` message sent during a private scene stays common knowledge.
 
 ## Leak checker
 
@@ -87,7 +108,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
   - **Rewind-safe.** Every saved memory remembers which messages it came from. If you edit, delete or swipe them (or open a branch without them), the entry is marked **Out of date**, and you get one warning. You can **Re-summarize** it, **Keep as is**, or remove it.
 - **Characters.** One sheet per character: their current condition, mood, goals and possessions, plus how they relate to each other character. Sheets update after each story summary and show how relationships changed ("suspicious of her, was: friendly acquaintance"). Each sheet is a lorebook entry triggered by the character's name. **Sheets only use public story memory, so they never give away a secret.**
 - **Threads.** Promises, plans, debts and open questions. Summaries add new threads and mark finished ones resolved. You can also add, edit, tick off or reopen them yourself. Open threads are always given to the model. Threads that come from a private scene stay private, and they follow that scene's reveals.
-- **Facts.** Small details the model must never forget. Pin one from any message with the 📌 in its `…` menu (it starts from the text you selected), or with `/pin`. Facts pinned from a private message stay private.
+- **Knowledge.** 🌍 *World knowledge*, the common knowledge described above, plus 📌 *Pinned facts*: small details the model must never forget. Pin one from any message with the 📌 in its `…` menu (it starts from the text you selected), or with `/pin`. Facts pinned from a private message stay private.
 - **Secrets.** The who-knows-what grid.
 
 **Story clock:** set it with `@time Day 4, dawn:` and `@place the stables:` at the start of a message (these combine with the other tags), with `/story-time` and `/story-place`, or with the ✏️ in the Story Memory header. It also updates from each story summary. An optional setting checks it after every reply. The model sees `[Story time: … Location: …]` with every reply.
@@ -97,7 +118,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 | Command | What it does |
 |---|---|
 | `/private Ana, Kael` | Flags the last message. `at=12-18` flags a range |
-| `/public at=12-18` | Removes the private flag |
+| `/public at=12-18` | Makes messages normal again: no longer private or common knowledge |
 | `/private-scene Ana, Kael` | Starts a scene. With no names, returns who is in it |
 | `/private-end` | Ends the scene and saves it if auto-save is on |
 | `/private-reveal Bob` | Bob finds out the latest secret. `at=14` picks the secret containing message 14 |
@@ -107,6 +128,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 | `/who-knows` | Opens the Secrets tab |
 | `/memory-merge` | Merges the oldest story entries into a chapter now |
 | `/pin Ana is left-handed` | Pins a fact |
+| `/common kind=news at=12` | Marks message 12 as common knowledge. Kinds: common, news, announcement, rumor |
 | `/thread Kael owes Bob a favor` | Adds an open thread |
 | `/story-time Day 4, dawn` · `/story-place the stables` | Sets the story clock. With no text, returns it |
 
@@ -114,6 +136,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 
 All of these are under Extensions → Private Scenes:
 
+- **Common knowledge:** condense marked messages into a short line, or use their text as is.
 - **Leak checker:** on or off, and auto-regenerate.
 - **Lorebook timeline:** auto-save secrets, keywords, hide after saving, always-include secret entries, and the summary instructions.
 - **Story memory:** auto-summarize, every N messages, how many recent messages to leave alone, always-include, the instructions, and chapter merging (entries per chapter, how many to keep detailed, chapter instructions).

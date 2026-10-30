@@ -2,12 +2,12 @@
 // warnings, the pin button, the scene bar and the settings panel.
 
 import {
-    adoptScene, allNames, ctx, defaultSettings, endScene, ensureMid, flagMessages, formatMembers, getFlag,
-    getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames, settings, startScene,
+    COMMON_KINDS, adoptScene, allNames, commonKind, ctx, defaultSettings, endScene, ensureMid, formatMembers, getCommon,
+    getFlag, getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames, settings, startScene,
 } from './core.js';
 import { refreshSceneEntry } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
-import { addFact, getClock } from './memory.js';
+import { addFact, getClock, setVisibility } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 
@@ -81,28 +81,26 @@ function chipToggle(name, checked) {
 }
 
 /**
- * Popup with a toggle chip per name plus a field for new names.
- * Returns the selected names, or null on cancel.
+ * A toggle chip per known name plus a field for new names.
+ * read() returns the selected names.
  */
-async function pickNames({ title, subtitle, current = [], exclude = [], hint, icon = 'fa-user-secret' }) {
+function namePicker(current = [], exclude = []) {
     const c = ctx();
     const excluded = new Set(exclude.map(x => x.toLowerCase()));
     const known = parseNames([...current, ...allNames(), c.name1]).filter(x => !excluded.has(x.toLowerCase()));
     const currentKeys = new Set(current.map(x => x.toLowerCase()));
 
-    const root = document.createElement('div');
-    root.classList.add('ps-popup');
-    root.append(popupHeader(icon, title, subtitle));
-
+    const wrap = document.createElement('div');
+    wrap.classList.add('ps-name-picker');
     const grid = document.createElement('div');
     grid.classList.add('ps-chip-grid');
     for (const name of known) grid.append(chipToggle(name, currentKeys.has(name.toLowerCase())));
-    root.append(grid);
+    wrap.append(grid);
 
     const addRow = $(`
         <div class="ps-add-row">
             <input type="text" class="text_pole" placeholder="Add a character… (comma separates several)">
-            <div class="menu_button menu_button_icon"><i class="fa-solid fa-plus"></i><span>Add</span></div>
+            <div class="menu_button menu_button_icon" role="button" tabindex="0" aria-label="Add"><i class="fa-solid fa-plus"></i><span>Add</span></div>
         </div>`);
     const input = addRow.find('input');
     const add = () => {
@@ -122,15 +120,98 @@ async function pickNames({ title, subtitle, current = [], exclude = [], hint, ic
             add();
         }
     });
-    root.append(addRow[0]);
+    wrap.append(addRow[0]);
 
+    const read = () => {
+        const checked = [...grid.querySelectorAll('input:checked')].map(x => x.value);
+        return parseNames([...checked, ...String(input.val()).split(',')]).filter(x => !excluded.has(x.toLowerCase()));
+    };
+    return { element: wrap, read };
+}
+
+/**
+ * Popup with a name picker. Returns the selected names, or null on cancel.
+ */
+async function pickNames({ title, subtitle, current = [], exclude = [], hint, icon = 'fa-user-secret' }) {
+    const c = ctx();
+    const root = document.createElement('div');
+    root.classList.add('ps-popup');
+    root.append(popupHeader(icon, title, subtitle));
+    const picker = namePicker(current, exclude);
+    root.append(picker.element);
     if (hint) root.append(Object.assign(document.createElement('small'), { className: 'ps-hint', textContent: hint }));
 
     const result = await c.callGenericPopup(root, c.POPUP_TYPE.CONFIRM, '', { okButton: 'Save', cancelButton: 'Cancel' });
-    if (result !== c.POPUP_RESULT.AFFIRMATIVE) return null;
+    return result === c.POPUP_RESULT.AFFIRMATIVE ? picker.read() : null;
+}
 
-    const checked = [...grid.querySelectorAll('input:checked')].map(x => x.value);
-    return parseNames([...checked, ...String(input.val()).split(',')]).filter(x => !excluded.has(x.toLowerCase()));
+const VISIBILITY = [
+    ['common', 'fa-earth-americas', 'Everyone', 'Every character knows, even ones who weren\'t there'],
+    ['normal', 'fa-users', 'Who was there', 'The usual: the characters present saw it'],
+    ['private', 'fa-user-secret', 'Only…', 'Just the characters you pick'],
+];
+
+/** One choice in a group of pill-shaped radio buttons. */
+function radioPill(group, value, icon, label, checked, extraClass = '') {
+    const option = $('<label class="ps-radio"><input type="radio"><span class="ps-radio-body"><i class="fa-solid"></i><span class="ps-radio-text"><b></b></span></span></label>');
+    option.addClass(extraClass);
+    option.find('input').attr({ name: group, value }).prop('checked', checked);
+    option.find('i').addClass(icon);
+    option.find('b').text(label);
+    return option;
+}
+
+/**
+ * "Who knows about this?" for a message: everyone (common knowledge, with a
+ * kind), whoever was there (normal), or only certain characters (private).
+ * Returns a visibility for setVisibility(), or null on cancel.
+ */
+async function pickVisibility(message) {
+    const c = ctx();
+    const common = getCommon(message);
+    const members = getMembers(message);
+    const mode = common ? 'common' : members ? 'private' : 'normal';
+    const group = `ps_vis_${Date.now()}`;
+
+    const root = $('<div class="ps-popup ps-visibility"></div>');
+    root.append(popupHeader('fa-eye', 'Who knows about this?', 'Choose which characters know what happens in this message.'));
+
+    const modes = $('<div class="ps-modes" role="radiogroup" aria-label="Who knows"></div>');
+    for (const [value, icon, label, description] of VISIBILITY) {
+        const option = radioPill(group, value, icon, label, value === mode, `ps-mode ps-mode-${value}`);
+        option.find('.ps-radio-text').append($('<small></small>').text(description));
+        modes.append(option);
+    }
+    root.append(modes);
+
+    const kinds = $('<div class="ps-mode-panel ps-panel-common"><div class="ps-panel-label">What kind?</div><div class="ps-kinds" role="radiogroup" aria-label="Kind of common knowledge"></div><small class="ps-hint"></small></div>');
+    for (const [value, { icon, label }] of Object.entries(COMMON_KINDS)) {
+        kinds.find('.ps-kinds').append(radioPill(`${group}_kind`, value, icon, label, value === (common?.kind ?? 'common'), 'ps-kind'));
+    }
+    kinds.find('.ps-hint').text('It is also saved, in short, to the World knowledge lorebook entry, so it is remembered later.');
+    root.append(kinds);
+
+    const picker = namePicker(members ?? getScene()?.members ?? []);
+    const privatePanel = $('<div class="ps-mode-panel ps-panel-private"><div class="ps-panel-label">Who knows?</div></div>').append(picker.element);
+    root.append(privatePanel);
+
+    const sync = () => {
+        const selected = root.find(`input[name="${group}"]:checked`).val();
+        kinds.toggle(selected === 'common');
+        privatePanel.toggle(selected === 'private');
+    };
+    root.on('change', `input[name="${group}"]`, sync);
+    sync();
+
+    const result = await c.callGenericPopup(root[0], c.POPUP_TYPE.CONFIRM, '', { okButton: 'Save', cancelButton: 'Cancel', wide: true });
+    if (result !== c.POPUP_RESULT.AFFIRMATIVE) return null;
+    const selected = root.find(`input[name="${group}"]:checked`).val();
+    if (selected === 'common') return { mode: 'common', kind: root.find(`input[name="${group}_kind"]:checked`).val() ?? 'common' };
+    if (selected === 'private') {
+        const names = picker.read();
+        return names.length ? { mode: 'private', members: names } : { mode: 'normal' };
+    }
+    return { mode: 'normal' };
 }
 
 export async function editSummaryPopup(summary, keywords) {
@@ -153,13 +234,8 @@ async function onMessageButtonClick(event) {
     const id = Number($(event.currentTarget).closest('.mes').attr('mesid'));
     const message = ctx().chat[id];
     if (!message) return;
-    const members = await pickNames({
-        title: 'Who knows about this?',
-        subtitle: 'Only the characters you pick will know about this.',
-        current: getMembers(message) ?? getScene()?.members ?? [],
-        hint: 'Deselect everyone to make it public again.',
-    });
-    if (members !== null) flagMessages([id], members);
+    const visibility = await pickVisibility(message);
+    if (visibility) await setVisibility([id], visibility);
 }
 
 export async function onSceneButtonClick() {
@@ -264,8 +340,18 @@ export function refreshUi() {
         const id = Number($(this).attr('mesid'));
         const message = chat[id];
         const members = s.enabled ? getMembers(message) : null;
+        const common = s.enabled ? getCommon(message) : null;
         $(this).toggleClass('ps-private', !!members);
+        $(this).toggleClass('ps-common', !!common).toggleClass('ps-common-rumor', common?.kind === 'rumor');
         $(this).find('.ps-badge, .ps-leak, .ps-checking').remove();
+        if (common && s.showBadges) {
+            const { icon, label } = COMMON_KINDS[commonKind(common.kind)];
+            const badge = $('<div class="ps-badge ps-badge-common"><span class="ps-badge-label"><i class="fa-solid"></i><span></span></span><span class="ps-badge-note"></span></div>');
+            badge.find('.ps-badge-label i').addClass(icon);
+            badge.find('.ps-badge-label span').text(label);
+            badge.find('.ps-badge-note').text(common.kind === 'rumor' ? 'Everyone has heard this · may not be true' : 'Everyone knows this');
+            $(this).find('.mes_text').before(badge);
+        }
         if (members && s.showBadges) {
             const badge = $('<div class="ps-badge"><span class="ps-badge-label"><i class="fa-solid fa-user-secret"></i>Private</span></div>');
             badge.append(chips(members));
@@ -298,7 +384,7 @@ export function refreshUi() {
 // ─── Fixed UI ────────────────────────────────────────────────────────
 
 function addMessageButtons() {
-    const buttons = '<div title="Private: choose who knows about this" class="mes_button ps_toggle fa-solid fa-user-secret"></div>'
+    const buttons = '<div title="Who knows about this? (everyone, who was there, or only certain characters)" class="mes_button ps_toggle fa-solid fa-user-secret"></div>'
         + '<div title="Pin a fact from this message" class="mes_button ps_pin fa-solid fa-thumbtack"></div>';
     $('#message_template .extraMesButtons').prepend(buttons);
     // Messages rendered before this extension loaded.
@@ -360,6 +446,7 @@ function addSettingsPanel() {
                             <li><code>@private Ana, Kael:</code> this message and the reply</li>
                             <li><code>@scene Ana, Kael:</code> start a private scene</li>
                             <li><code>@endscene</code> end it</li>
+                            <li><code>@news:</code> <code>@rumor:</code> <code>@announcement:</code> <code>@common:</code> everyone knows this message</li>
                         </ul>
                     </div>
 
@@ -380,6 +467,12 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_clock_auto" type="checkbox"> <span>Update it after every reply (one extra short generation)</span></label>
                         <small>Otherwise it updates from summaries and from <code>@time …:</code> / <code>@place …:</code> tags.</small>
                         <div class="ps-clock-settings"><span id="ps_clock_status"></span><div id="ps_clock_edit" class="menu_button menu_button_icon"><i class="fa-solid fa-pen"></i><span>Set</span></div></div>
+                    </div>
+
+                    <div class="ps-section">
+                        <div class="ps-section-title"><i class="fa-solid fa-earth-americas"></i> Common knowledge</div>
+                        <small>Mark a message as something every character knows (news, announcements, rumors) with the <i class="fa-solid fa-user-secret"></i> button → Everyone, or a tag like <code>@news:</code>. It is saved to the 🌍 World knowledge lorebook entry.</small>
+                        <label class="checkbox_label"><input id="ps_world_condense" type="checkbox"> <span>Condense each marked message into a short line (one extra short generation each)</span></label>
                     </div>
 
                     <div class="ps-section">
@@ -462,6 +555,14 @@ function addSettingsPanel() {
                                 <input id="ps_label_end" class="text_pole" type="text">
                             </div>
                         </div>
+                        <label for="ps_common_rules">Common knowledge rules</label>
+                        <textarea id="ps_common_rules" class="text_pole textarea_compact" rows="3"></textarea>
+                        <label for="ps_common_start">Common knowledge label (<code>{{kind}}</code> = News, Rumor…)</label>
+                        <input id="ps_common_start" class="text_pole" type="text">
+                        <label for="ps_rumor_start">Rumor label</label>
+                        <input id="ps_rumor_start" class="text_pole" type="text">
+                        <label for="ps_common_end">Common knowledge end label</label>
+                        <input id="ps_common_end" class="text_pole" type="text">
                         <label for="ps_rules_depth">Rules depth (0 = after the last message)</label>
                         <input id="ps_rules_depth" class="text_pole" type="number" min="0" max="100">
                         <div id="ps_reset" class="menu_button menu_button_icon"><i class="fa-solid fa-rotate-left"></i><span>Restore default text</span></div>
@@ -491,6 +592,7 @@ function addSettingsPanel() {
         '#ps_threads': 'trackThreads',
         '#ps_clock_enabled': 'clockEnabled',
         '#ps_clock_auto': 'clockAutoTrack',
+        '#ps_world_condense': 'worldCondense',
     };
     const numbers = new Set(['rulesDepth', 'memoryEvery', 'memoryKeepRecent', 'consolidateEvery', 'consolidateKeep']);
     const fields = {
@@ -506,8 +608,13 @@ function addSettingsPanel() {
         '#ps_consolidate_every': 'consolidateEvery',
         '#ps_consolidate_keep': 'consolidateKeep',
         '#ps_chapter_prompt': 'chapterPrompt',
+        '#ps_common_rules': 'commonRules',
+        '#ps_common_start': 'commonLabelStart',
+        '#ps_rumor_start': 'rumorLabelStart',
+        '#ps_common_end': 'commonLabelEnd',
     };
-    const textDefaults = ['rules', 'sceneRules', 'labelStart', 'labelEnd', 'summaryPrompt', 'memoryPrompt', 'chapterPrompt', 'rulesDepth'];
+    const textDefaults = ['rules', 'sceneRules', 'labelStart', 'labelEnd', 'summaryPrompt', 'memoryPrompt', 'chapterPrompt', 'rulesDepth',
+        'commonRules', 'commonLabelStart', 'rumorLabelStart', 'commonLabelEnd'];
     const load = () => {
         for (const [selector, key] of Object.entries(checkboxes)) $(selector).prop('checked', s[key]);
         for (const [selector, key] of Object.entries(fields)) $(selector).val(s[key]);

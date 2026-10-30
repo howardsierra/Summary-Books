@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "howardsierra",
-    "version": "0.4.2",
+    "version": "0.5.0",
     "homePage": "https://github.com/howardsierra/summary-books",
     "generate_interceptor": "privateScenesInterceptor",
     "auto_update": true

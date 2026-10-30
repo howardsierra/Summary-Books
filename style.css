@@ -19,6 +19,8 @@
     --ps-ok: #34d399;
     --ps-warn: #f59e0b;
     --ps-danger: #f87171;
+    --ps-world: #38bdf8;
+    --ps-rumor: #f472b6;
 
     --ps-text: var(--SmartThemeBodyColor, #dcdcd2);
     --ps-muted: color-mix(in srgb, var(--ps-text) 62%, transparent);
@@ -306,6 +308,29 @@
     letter-spacing: 0.09em;
     text-transform: uppercase;
     color: var(--ps-accent);
+}
+
+/* Common knowledge: sky blue (rumors: pink), with a globe-style badge. */
+#chat .mes.ps-common {
+    --ps-known: var(--ps-world);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--ps-known) 13%, transparent), transparent 75%);
+    box-shadow: inset 3px 0 0 var(--ps-known);
+    border-radius: var(--ps-radius);
+}
+
+#chat .mes.ps-common-rumor {
+    --ps-known: var(--ps-rumor);
+}
+
+.ps-badge-common .ps-badge-label {
+    color: color-mix(in srgb, var(--ps-known, var(--ps-world)) 80%, var(--ps-text));
+    background: color-mix(in srgb, var(--ps-known, var(--ps-world)) 14%, transparent);
+    border-color: color-mix(in srgb, var(--ps-known, var(--ps-world)) 40%, transparent);
+}
+
+.ps-badge-note {
+    font-size: 0.75em;
+    color: var(--ps-muted);
 }
 
 .ps-badge-later {
@@ -1859,5 +1884,200 @@ input[type='checkbox'].ps-list-check:focus-visible {
 
     .private-scenes-settings .checkbox_label {
         min-height: 36px;
+    }
+}
+
+/* ── 14. Who knows: visibility popup & world knowledge ───────────── */
+
+.ps-modes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.ps-radio {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.ps-radio input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ps-radio-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 100%;
+    min-height: var(--ps-tap);
+    padding: 10px 12px;
+    border-radius: var(--ps-radius);
+    background: var(--ps-faint);
+    border: 1px solid var(--ps-border);
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s var(--ps-ease);
+}
+
+.ps-radio:active .ps-radio-body {
+    transform: scale(0.98);
+}
+
+.ps-radio-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ps-radio-text small {
+    font-size: 0.78em;
+    line-height: 1.35;
+    color: var(--ps-muted);
+}
+
+/* The three "who knows" choices: a tinted icon each. */
+.ps-mode {
+    --ps-mode: var(--ps-text);
+}
+
+.ps-mode-common { --ps-mode: var(--ps-world); }
+.ps-mode-normal { --ps-mode: var(--ps-ok); }
+.ps-mode-private { --ps-mode: var(--ps-accent); }
+
+.ps-mode .ps-radio-body > i {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    color: var(--ps-mode);
+    background: color-mix(in srgb, var(--ps-mode) 15%, transparent);
+}
+
+.ps-mode input:checked + .ps-radio-body {
+    background: color-mix(in srgb, var(--ps-mode) 12%, var(--ps-surface));
+    border-color: color-mix(in srgb, var(--ps-mode) 60%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ps-mode) 40%, transparent), 0 4px 16px color-mix(in srgb, var(--ps-mode) 18%, transparent);
+}
+
+.ps-mode input:checked + .ps-radio-body > i {
+    color: #fff;
+    background: var(--ps-mode);
+}
+
+.ps-radio input:focus-visible + .ps-radio-body {
+    outline: 2px solid var(--ps-accent);
+    outline-offset: 2px;
+}
+
+.ps-mode-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: ps-fade-in 0.2s ease-out;
+}
+
+.ps-panel-label {
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ps-muted);
+}
+
+.ps-name-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Kinds of common knowledge */
+.ps-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ps-kind .ps-radio-body {
+    padding: 6px 14px;
+    border-radius: var(--ps-pill);
+}
+
+.ps-kind .ps-radio-body > i {
+    color: var(--ps-world);
+}
+
+.ps-kind input[value="rumor"] + .ps-radio-body > i {
+    color: var(--ps-rumor);
+}
+
+.ps-kind input:checked + .ps-radio-body {
+    background: color-mix(in srgb, var(--ps-world) 16%, transparent);
+    border-color: color-mix(in srgb, var(--ps-world) 55%, transparent);
+}
+
+.ps-kind input[value="rumor"]:checked + .ps-radio-body {
+    background: color-mix(in srgb, var(--ps-rumor) 16%, transparent);
+    border-color: color-mix(in srgb, var(--ps-rumor) 55%, transparent);
+}
+
+/* World knowledge list */
+.ps-kind-pill {
+    --ps-kind-color: var(--ps-world);
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 6px;
+    padding: 1px 10px;
+    border-radius: var(--ps-pill);
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--ps-kind-color) 80%, var(--ps-text));
+    background: color-mix(in srgb, var(--ps-kind-color) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ps-kind-color) 40%, transparent);
+}
+
+.ps-kind-pill.ps-kind-rumor {
+    --ps-kind-color: var(--ps-rumor);
+}
+
+.ps-world-item {
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ps-world) 70%, transparent);
+}
+
+.ps-list-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+}
+
+.ps-world-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ps-warn-text {
+    color: var(--ps-warn) !important;
+}
+
+@media (hover: hover) {
+    .ps-radio:hover .ps-radio-body {
+        border-color: color-mix(in srgb, var(--ps-text) 28%, transparent);
+    }
+}
+
+@media (max-width: 600px) {
+    /* The three choices stack, each a full-width row. */
+    .ps-modes {
+        grid-template-columns: 1fr;
     }
 }

@@ -2,14 +2,17 @@
 // sheets, open threads, pinned facts and secrets (who knows what).
 
 import {
-    MID, adoptScene, allNames, chatState, ctx, findScenes, formatMembers, getReveals, membersKey, nameHue,
-    revealedNames, setRevealedNames, settings, sourceStatus,
+    COMMON_KINDS, MID, adoptScene, allNames, chatState, commonKind, ctx, findScenes, formatMembers, getReveals, membersKey,
+    nameHue, revealedNames, setRevealedNames, settings, sourceStatus,
 } from './core.js';
 import {
     acceptCurrent, approveDraft, canConsolidate, discardDraft, levelName, maybeConsolidate, orphanScenes,
     refreshSceneEntry, removeMemory, removeSceneEntry, resummarizeMemory, saveScene, saveStorySoFar, saving,
     splitChapter, staleItems, writeMemoryEntry, writeSceneEntry,
 } from './lorebook.js';
+import {
+    addWorldText, condensing, editWorldItem, refreshWorldItem, removeWorldItem, worldStatus,
+} from './memory.js';
 import {
     addFact, addSheet, addThread, editFact, editThread, getClock, publicStoryText, relationshipList, removeFact,
     removeSheet, removeThread, setClock, setSheetText, setThreadStatus, sheetList, sheetToText, sheetsBusy, updateSheets,
@@ -23,7 +26,7 @@ const TABS = [
     ['timeline', 'fa-timeline', 'Timeline'],
     ['characters', 'fa-users', 'Characters'],
     ['threads', 'fa-list-check', 'Threads'],
-    ['facts', 'fa-thumbtack', 'Facts'],
+    ['facts', 'fa-earth-americas', 'Knowledge'],
     ['secrets', 'fa-user-secret', 'Secrets'],
 ];
 
@@ -66,7 +69,7 @@ function renderTabs() {
         timeline: scenes.length + state.memories.length,
         characters: sheetList().length,
         threads: state.threads.filter(t => t.status === 'open').length,
-        facts: state.facts.length,
+        facts: state.facts.length + state.world.length,
         secrets: scenes.length,
     };
     // Reviews waiting or out-of-date entries put a dot on the timeline tab.
@@ -532,12 +535,73 @@ function renderThreads(body) {
     }
 }
 
+function sourceLink(index) {
+    return $('<small class="ps-link" role="button" tabindex="0"><i class="fa-solid fa-location-arrow"></i> </small>')
+        .append(document.createTextNode(`from msg ${index}`)).on('click', () => jumpTo(index));
+}
+
+function kindPill(kind) {
+    const { icon, label } = COMMON_KINDS[commonKind(kind)];
+    return $('<span class="ps-kind-pill"><i class="fa-solid"></i><span></span></span>')
+        .addClass(`ps-kind-${commonKind(kind)}`).find('i').addClass(icon).end().find('span').text(label).end();
+}
+
 function renderFacts(body) {
+    renderWorld(body);
+    renderPinned(body);
+}
+
+/** Common knowledge: news, announcements, rumors, and things everyone knows. */
+function renderWorld(body) {
+    const world = chatState().world;
+    const section = $('<section class="ps-section-block"><h4><i class="fa-solid fa-earth-americas"></i> World knowledge</h4></section>');
+    section.append(addRow('Add something every character knows…', (text) => addWorldText(text)));
+    section.append('<small class="ps-hint">Every character knows these, NPCs included, even if they weren\'t there. Mark a message with the <i class="fa-solid fa-user-secret"></i> button → Everyone, or start it with @news:, @rumor:, @announcement: or @common:.</small>');
+
+    if (!world.length) {
+        section.append(emptyState('fa-newspaper', 'Nothing everyone knows yet', 'News articles, public announcements, rumors, and famous facts show up here.'));
+        body.append(section);
+        return;
+    }
+    const positions = new Map(ctx().chat.map((m, i) => [m.extra?.[MID], i]));
+    const list = $('<ul class="ps-list"></ul>');
+    for (const item of world) {
+        const li = listItem(item.text, null).addClass('ps-world-item');
+        li.find('.ps-list-main').prepend(kindPill(item.kind));
+        const meta = $('<div class="ps-list-meta"></div>');
+        const index = item.sourceMid ? positions.get(item.sourceMid) : undefined;
+        if (index !== undefined) meta.append(sourceLink(index));
+        const status = worldStatus(item);
+        if (condensing.has(item.id)) meta.append('<small class="ps-world-status"><i class="fa-solid fa-spinner fa-spin"></i> Condensing…</small>');
+        else if (status === 'changed') meta.append('<small class="ps-world-status ps-warn-text"><i class="fa-solid fa-triangle-exclamation"></i> The message was edited</small>');
+        else if (status === 'gone') meta.append('<small class="ps-world-status ps-warn-text"><i class="fa-solid fa-triangle-exclamation"></i> The message was deleted</small>');
+        if (meta.children().length) li.find('.ps-list-main').append(meta);
+
+        const actions = li.find('.ps-list-actions');
+        if (status === 'changed') {
+            actions.append(actionButton('ps-act-save', 'fa-rotate', '', 'Update from the edited message').on('click', () => refreshWorldItem(item.id)));
+        }
+        actions.append(
+            actionButton('ps-act-edit', 'fa-pen', '', 'Edit').on('click', async () => {
+                const text = await editTextPopup('Edit what everyone knows:', item.text);
+                if (text) await editWorldItem(item.id, text);
+            }),
+            actionButton('ps-act-remove', 'fa-trash-can', '', 'Remove (the message becomes normal again)').on('click', () => removeWorldItem(item.id)),
+        );
+        list.append(li);
+    }
+    section.append(list);
+    body.append(section);
+}
+
+function renderPinned(body) {
     const facts = chatState().facts;
-    body.append(addRow('Add a fact the story must remember…', (text) => addFact(text)));
-    body.append('<small class="ps-hint">Pinned facts are always given to the model. Pin one from any message with the thumbtack in its “…” menu.</small>');
+    const section = $('<section class="ps-section-block"><h4><i class="fa-solid fa-thumbtack"></i> Pinned facts</h4></section>');
+    section.append(addRow('Add a fact the story must remember…', (text) => addFact(text)));
+    section.append('<small class="ps-hint">Pinned facts are always given to the model. Pin one from any message with the thumbtack in its “…” menu.</small>');
     if (!facts.length) {
-        body.append(emptyState('fa-thumbtack', 'No pinned facts', 'Small details that summaries tend to drop, like “Ana is left-handed”.'));
+        section.append(emptyState('fa-thumbtack', 'No pinned facts', 'Small details that summaries tend to drop, like “Ana is left-handed”.'));
+        body.append(section);
         return;
     }
     const positions = new Map(ctx().chat.map((m, i) => [m.extra?.[MID], i]));
@@ -545,10 +609,7 @@ function renderFacts(body) {
     for (const fact of facts) {
         const li = listItem(fact.text, fact.members);
         const source = fact.sourceMid ? positions.get(fact.sourceMid) : undefined;
-        if (source !== undefined) {
-            li.find('.ps-list-main').append($('<small class="ps-link" role="button" tabindex="0"><i class="fa-solid fa-location-arrow"></i> </small>')
-                .append(document.createTextNode(`from msg ${source}`)).on('click', () => jumpTo(source)));
-        }
+        if (source !== undefined) li.find('.ps-list-main').append(sourceLink(source));
         li.find('.ps-list-actions').append(
             actionButton('ps-act-edit', 'fa-pen', '', 'Edit').on('click', async () => {
                 const text = await editTextPopup('Edit the fact:', fact.text);
@@ -558,7 +619,8 @@ function renderFacts(body) {
         );
         list.append(li);
     }
-    body.append(list);
+    section.append(list);
+    body.append(section);
 }
 
 // ─── Secrets tab (who knows what) ────────────────────────────────────

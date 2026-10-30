@@ -7,6 +7,17 @@
 export const MODULE = 'privateScenes';
 export const FLAG = 'private_scene';
 export const LEAK = 'ps_leak';
+/** message.extra.ps_common = { kind }: something every character in the world knows. */
+export const COMMON = 'ps_common';
+
+/** Kinds of common knowledge: how they're labelled for the model and shown on screen. */
+export const COMMON_KINDS = Object.freeze({
+    common: { label: 'Common knowledge', icon: 'fa-earth-americas' },
+    news: { label: 'News', icon: 'fa-newspaper' },
+    announcement: { label: 'Announcement', icon: 'fa-bullhorn' },
+    rumor: { label: 'Rumor', icon: 'fa-comments' },
+});
+export const commonKind = (kind) => COMMON_KINDS[kind] ? kind : 'common';
 /** Stable id per message slot, so memories can find their source messages after edits and deletions. */
 export const MID = 'ps_mid';
 export const BOOK_KEY = 'world_info';
@@ -42,6 +53,12 @@ export const defaultSettings = Object.freeze({
         + 'Use names instead of pronouns. Output only the summary, with no preamble.',
     leakCheck: true,
     leakAutoRegenerate: false,
+    commonLabelStart: '[COMMON KNOWLEDGE ({{kind}}) — every character knows this, including those who were not there]',
+    rumorLabelStart: '[RUMOR — every character has heard this, but it may not be true]',
+    commonLabelEnd: '[END COMMON KNOWLEDGE]',
+    commonRules: 'Parts marked [COMMON KNOWLEDGE …] are known to every character in the world, including characters who were not present, '
+        + 'so anyone may mention or react to them. Parts marked [RUMOR …] have been heard by everyone, but may or may not be true.',
+    worldCondense: true,
     reviewBeforeSave: false,
     consolidate: true,
     consolidateEvery: 5,
@@ -89,6 +106,7 @@ export function chatState() {
     state.sheets ??= {};
     state.clock ??= { time: '', place: '' };
     state.entries ??= {};
+    state.world ??= [];
     return state;
 }
 
@@ -162,28 +180,55 @@ export const getMembers = (message) => getFlag(message)?.members ?? null;
  * every swipe so it belongs to the message slot, not just the visible swipe.
  */
 export function setFlag(message, flag) {
-    const apply = (extra) => {
-        if (flag) extra[FLAG] = { members: [...flag.members], sceneId: flag.sceneId };
-        else delete extra[FLAG];
-    };
+    // Private and common knowledge are opposites: setting one clears the other.
+    setOnAllSwipes(message, (extra) => {
+        if (flag) {
+            extra[FLAG] = { members: [...flag.members], sceneId: flag.sceneId };
+            delete extra[COMMON];
+        } else {
+            delete extra[FLAG];
+        }
+    });
+    if (flag) rememberNames(flag.members);
+}
+
+/** Applies a change to a message's extras and to every swipe's extras. */
+function setOnAllSwipes(message, apply) {
     message.extra ??= {};
     apply(message.extra);
-    if (Array.isArray(message.swipe_info)) {
-        for (const info of message.swipe_info) {
-            if (!info || typeof info !== 'object') continue;
-            info.extra ??= {};
-            apply(info.extra);
-        }
+    for (const info of Array.isArray(message.swipe_info) ? message.swipe_info : []) {
+        if (!info || typeof info !== 'object') continue;
+        info.extra ??= {};
+        apply(info.extra);
     }
-    if (flag) rememberNames(flag.members);
+}
+
+/** @returns {{kind: string}|null} */
+export function getCommon(message) {
+    const common = message?.extra?.[COMMON];
+    return common?.kind ? common : null;
+}
+
+/** Marks a message as common knowledge (or clears it with null). Clears any private flag. */
+export function setCommon(message, kind) {
+    setOnAllSwipes(message, (extra) => {
+        if (kind) {
+            extra[COMMON] = { kind: commonKind(kind) };
+            delete extra[FLAG];
+        } else {
+            delete extra[COMMON];
+        }
+    });
 }
 
 /** A new swipe starts with empty extras; carry the flag and message id over from its siblings. */
 export function inheritSwipeFlag(message) {
     if (!message || !Array.isArray(message.swipe_info)) return;
-    if (!getFlag(message)) {
+    if (!getFlag(message) && !getCommon(message)) {
         const flagged = message.swipe_info.find(info => getFlag(info));
         if (flagged) setFlag(message, getFlag(flagged));
+        const common = message.swipe_info.find(info => getCommon(info));
+        if (common) setCommon(message, getCommon(common).kind);
     }
     if (!message.extra?.[MID]) {
         const mid = message.swipe_info.find(info => info?.extra?.[MID])?.extra[MID];

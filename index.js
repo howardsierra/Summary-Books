@@ -2,18 +2,21 @@
 // narrator knows those events happened out of everyone else's sight. Keeps the
 // story's memory in the chat's lorebook (secrets, story summaries merged into
 // chapters, character sheets, open threads, pinned facts, the story clock),
-// tracks who found out later, and checks replies for leaked secrets.
+// tracks who found out later, marks common knowledge (news, rumors) that every
+// character knows, and checks replies for leaked secrets.
 
 import {
-    ctx, endScene, flagMessages, formatTemplate, getFlag, getScene, hooks, inheritSwipeFlag, membersKey,
-    parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
-    adoptScene,
+    COMMON_KINDS, ctx, endScene, flagMessages, formatTemplate, getCommon, getFlag, getScene, hooks, inheritSwipeFlag,
+    membersKey, parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
+    adoptScene, commonKind,
 } from './src/core.js';
 import {
     autoSaveScene, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
     saveStorySoFar,
 } from './src/lorebook.js';
-import { addFact, addThread, clockText, getClock, hasPrivateLists, setClock, trackClock } from './src/memory.js';
+import {
+    addFact, addThread, clockText, getClock, hasCommonKnowledge, hasPrivateLists, setClock, setVisibility, trackClock,
+} from './src/memory.js';
 import { checkLeak, clearRetries } from './src/leaks.js';
 import { initUi, refreshUi } from './src/ui.js';
 import { openMemory } from './src/hub.js';
@@ -43,33 +46,54 @@ globalThis.privateScenesInterceptor = async function (chat, _contextSize, _abort
 
     const scene = getScene();
     const openKeys = new Set([scene?.sceneId, pendingReply?.sceneId].filter(Boolean));
-    const runKey = (message) => {
-        const flag = getFlag(message);
-        return flag ? flag.sceneId ?? `m:${membersKey(flag.members)}` : '';
-    };
     let anyPrivate = false;
+    let anyCommon = false;
 
+    /** The labelled run a message belongs to: a private scene or a kind of common knowledge. */
+    const runOf = (message) => {
+        const flag = getFlag(message);
+        if (flag) {
+            const revealed = flag.sceneId ? revealedNames(flag.sceneId) : [];
+            return {
+                key: flag.sceneId ?? `m:${membersKey(flag.members)}`,
+                start: formatTemplate(s.labelStart, flag.members, revealed),
+                end: formatTemplate(s.labelEnd, flag.members, revealed),
+            };
+        }
+        const common = getCommon(message);
+        if (common) {
+            const kind = commonKind(common.kind);
+            return {
+                key: `common:${kind}`,
+                start: kind === 'rumor' ? s.rumorLabelStart : String(s.commonLabelStart).replaceAll('{{kind}}', COMMON_KINDS[kind].label),
+                end: s.commonLabelEnd,
+            };
+        }
+        return null;
+    };
+
+    const runs = chat.map(runOf);
     for (let i = 0; i < chat.length; i++) {
-        const flag = getFlag(chat[i]);
-        if (!flag) continue;
-        anyPrivate = true;
+        const run = runs[i];
+        if (!run) continue;
+        if (run.key.startsWith('common:')) anyCommon = true;
+        else anyPrivate = true;
 
-        const key = runKey(chat[i]);
         const isLast = i === chat.length - 1;
-        const prevSame = i > 0 && runKey(chat[i - 1]) === key;
-        const nextSame = !isLast && runKey(chat[i + 1]) === key;
+        const prevSame = i > 0 && runs[i - 1]?.key === run.key;
+        const nextSame = !isLast && runs[i + 1]?.key === run.key;
         // Leave the run open when the reply being written continues it.
-        const keepOpen = isLast && (type === 'continue' || openKeys.has(key));
-        const revealed = flag.sceneId ? revealedNames(flag.sceneId) : [];
+        const keepOpen = isLast && (type === 'continue' || openKeys.has(run.key));
 
         let mes = chat[i].mes;
-        if (!prevSame) mes = `${formatTemplate(s.labelStart, flag.members, revealed)}\n${mes}`;
-        if (!nextSame && !keepOpen) mes = `${mes}\n${formatTemplate(s.labelEnd, flag.members, revealed)}`;
+        if (!prevSame) mes = `${run.start}\n${mes}`;
+        if (!nextSame && !keepOpen) mes = `${mes}\n${run.end}`;
         chat[i] = { ...chat[i], mes };
     }
 
     const parts = [];
     if (anyPrivate || scene || hasSavedScenes() || hasPrivateLists()) parts.push(s.rules);
+    if (anyCommon || hasCommonKnowledge()) parts.push(s.commonRules);
     const current = scene ?? pendingReply;
     if (current) parts.push(formatTemplate(s.sceneRules, current.members));
     ctx().setExtensionPrompt(PROMPT_KEY, parts.join('\n'), IN_CHAT, Number(s.rulesDepth) || 0, false, ROLE_SYSTEM);
@@ -84,6 +108,9 @@ function clearPrompts() {
 // ─── Inline tags ─────────────────────────────────────────────────────
 
 const TAG = /^\s*@(private|scene|time|place)\s+([^:\n]+?)\s*(?::|\n|$)\s*/i;
+/** "@news:", "@rumor:", "@announcement:", "@common:" — the message becomes common knowledge. */
+const COMMON_TAG = /^\s*@(news|rumou?r|announce(?:ment)?|common|known|everyone)\b\s*:?\s*/i;
+const COMMON_TAG_KINDS = { news: 'news', rumor: 'rumor', rumour: 'rumor', announce: 'announcement', announcement: 'announcement' };
 const END_TAG = /^\s*@(endscene|end-scene|public)\b\s*:?\s*/i;
 
 /**
@@ -99,6 +126,13 @@ function applyInlineTags(id) {
         if (end) {
             message.mes = message.mes.slice(end[0].length);
             endScene();
+            continue;
+        }
+        const common = message.mes.match(COMMON_TAG);
+        if (common) {
+            message.mes = message.mes.slice(common[0].length);
+            // Not awaited: condensing it for the lorebook runs alongside the reply.
+            setVisibility([id], { mode: 'common', kind: COMMON_TAG_KINDS[common[1].toLowerCase()] ?? 'common' });
             continue;
         }
         const tag = message.mes.match(TAG);
@@ -127,7 +161,8 @@ function onMessageSent(id) {
     applyInlineTags(id);
     const message = ctx().chat[id];
     const scene = getScene();
-    if (message && scene) setFlag(message, { members: scene.members, sceneId: scene.sceneId });
+    // A message tagged as common knowledge stays common even during a private scene.
+    if (message && scene && !getCommon(message)) setFlag(message, { members: scene.members, sceneId: scene.sceneId });
     saveSoon();
     refreshUi();
 }
@@ -195,20 +230,37 @@ function registerCommands() {
         helpString: 'Marks messages as private between the named characters. Example: <code>/private at=12-18 Ana, Kael</code>',
         namedArgumentList: [atArg()],
         unnamedArgumentList: [namesArg(true)],
-        callback: (args, value) => {
+        callback: async (args, value) => {
             const members = parseNames(value);
             if (!members.length) throw new Error('/private needs at least one name.');
-            flagMessages(parseRange(args.at), members);
+            await setVisibility(parseRange(args.at), { mode: 'private', members });
             return '';
         },
     });
 
     add({
         name: 'public',
-        helpString: 'Removes the private flag entirely. To record that someone found out instead, use <code>/private-reveal</code>.',
+        helpString: 'Makes messages normal again: no longer private or common knowledge. '
+            + 'To record that someone found out a secret instead, use <code>/private-reveal</code>.',
         namedArgumentList: [atArg()],
-        callback: (args) => {
-            flagMessages(parseRange(args.at), []);
+        callback: async (args) => {
+            await setVisibility(parseRange(args.at), { mode: 'normal' });
+            return '';
+        },
+    });
+
+    add({
+        name: 'common',
+        helpString: 'Marks messages as common knowledge that every character knows, even ones who were not there. '
+            + 'Kinds: common, news, announcement, rumor. Example: <code>/common kind=news at=12</code>',
+        namedArgumentList: [atArg(), SlashCommandNamedArgument.fromProps({
+            name: 'kind',
+            description: 'common, news, announcement, or rumor',
+            typeList: [ARGUMENT_TYPE.STRING],
+            enumList: Object.keys(COMMON_KINDS),
+        })],
+        callback: async (args) => {
+            await setVisibility(parseRange(args.at), { mode: 'common', kind: commonKind(String(args.kind ?? 'common')) });
             return '';
         },
     });
