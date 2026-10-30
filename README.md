@@ -9,7 +9,7 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 - **Private Timeline.** Saves private scenes, and optionally the public story, as summaries in the chat's lorebook, with keywords as triggers.
 - **Inline tags.** Type `@private Ana, Kael:` in a message instead of clicking.
 
-Tested with SillyTavern 1.19.0.
+Tested with SillyTavern 1.19.0 on desktop and on phone-sized screens.
 
 ## Install
 
@@ -59,7 +59,7 @@ Use **Reveal…** on a timeline card, click an empty dot in the *Who knows what*
 
 ## Who knows what
 
-Open it from the wand menu, the timeline, or `/who-knows`. Each row is a secret and each column is a character:
+Open it from the wand menu, the timeline, or `/who-knows`. On a computer, each row is a secret and each column is a character. On a phone, each secret is a card with a chip per character:
 
 - ● **Filled:** the character was there.
 - ◌ **Dashed:** the character found out later. Click to undo.

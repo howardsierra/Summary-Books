@@ -369,51 +369,84 @@ function refreshKnowledge() {
         return;
     }
 
-    const table = $('<table class="ps-grid"><thead><tr><th class="ps-grid-secret">Secret</th></tr></thead><tbody></tbody></table>');
-    for (const name of names) table.find('thead tr').append($('<th></th>').append(chip(name)));
-
-    for (const scene of scenes) {
+    const compact = window.matchMedia('(max-width: 600px)').matches;
+    const rows = scenes.map(scene => {
         const record = chatState().timeline[scene.id];
-        const row = $('<tr><td class="ps-grid-secret"><b></b><small></small></td></tr>');
-        row.find('b').text(`Scene ${scene.index}`);
         const about = String(record?.summary ?? ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');
-        row.find('small').text(about.length > 70 ? `${about.slice(0, 70)}…` : about).attr('title', about);
-
-        const memberKeys = new Set(scene.members.map(x => x.toLowerCase()));
-        const reveals = new Map(getReveals(scene.id).map(r => [r.name.toLowerCase(), r]));
-        for (const name of names) {
-            const cell = $('<td><span class="ps-cell"></span></td>');
-            const dot = cell.find('.ps-cell').css('--ps-hue', String(nameHue(name)));
-            const key = name.toLowerCase();
-            if (memberKeys.has(key)) {
-                dot.addClass('ps-cell-member').attr('title', `${name} was there`);
-            } else if (reveals.has(key)) {
-                dot.addClass('ps-cell-revealed ps-clickable').attr('title', `${name} found out at message ${reveals.get(key).at}. Click to undo.`)
-                    .on('click', async () => {
-                        setRevealedNames(scene, revealedNames(scene.id).filter(x => x.toLowerCase() !== key));
-                        await refreshSceneEntry(scene.id);
-                        refreshUi();
-                    });
-            } else {
-                dot.addClass('ps-cell-unknown ps-clickable').attr('title', `${name} doesn't know. Click if ${name} finds out now.`)
-                    .on('click', async () => {
-                        const adopted = adoptScene(scene);
-                        setRevealedNames(adopted, [...revealedNames(adopted.id), name]);
-                        await refreshSceneEntry(adopted.id);
-                        refreshUi();
-                    });
-            }
-            row.append(cell);
-        }
-        table.find('tbody').append(row);
-    }
-    body.append($('<div class="ps-grid-scroll"></div>').append(table));
+        return { scene, about, cells: names.map(name => knowledgeCell(scene, name)) };
+    });
+    body.append(compact ? knowledgeCards(rows) : knowledgeTable(rows, names));
     body.append(`
         <div class="ps-grid-legend">
             <span><span class="ps-cell ps-cell-member"></span> Was there</span>
             <span><span class="ps-cell ps-cell-revealed"></span> Found out later</span>
-            <span><span class="ps-cell ps-cell-unknown"></span> Doesn't know (click to reveal)</span>
+            <span><span class="ps-cell ps-cell-unknown"></span> Doesn't know (tap to reveal)</span>
         </div>`);
+}
+
+/** What one character knows about one secret, and what tapping it does. */
+function knowledgeCell(scene, name) {
+    const key = name.toLowerCase();
+    const reveal = getReveals(scene.id).find(r => r.name.toLowerCase() === key);
+    const update = async (names) => {
+        const adopted = adoptScene(scene);
+        setRevealedNames(adopted, names(adopted));
+        await refreshSceneEntry(adopted.id);
+        refreshUi();
+    };
+    if (scene.members.some(x => x.toLowerCase() === key)) {
+        return { name, state: 'member', title: `${name} was there` };
+    }
+    if (reveal) {
+        return {
+            name, state: 'revealed', detail: `msg ${reveal.at}`,
+            title: `${name} found out at message ${reveal.at}. Tap to undo.`,
+            toggle: () => update(adopted => revealedNames(adopted.id).filter(x => x.toLowerCase() !== key)),
+        };
+    }
+    return {
+        name, state: 'unknown',
+        title: `${name} doesn't know. Tap if ${name} finds out now.`,
+        toggle: () => update(adopted => [...revealedNames(adopted.id), name]),
+    };
+}
+
+function knowledgeTable(rows, names) {
+    const table = $('<table class="ps-grid"><thead><tr><th class="ps-grid-secret">Secret</th></tr></thead><tbody></tbody></table>');
+    for (const name of names) table.find('thead tr').append($('<th></th>').append(chip(name)));
+    for (const { scene, about, cells } of rows) {
+        const row = $('<tr><td class="ps-grid-secret"><b></b><small></small></td></tr>');
+        row.find('b').text(`Scene ${scene.index}`);
+        row.find('small').text(about.length > 70 ? `${about.slice(0, 70)}…` : about).attr('title', about);
+        for (const cell of cells) {
+            const dot = $('<span class="ps-cell"></span>').css('--ps-hue', String(nameHue(cell.name)))
+                .addClass(`ps-cell-${cell.state}`).attr('title', cell.title);
+            if (cell.toggle) dot.addClass('ps-clickable').on('click', cell.toggle);
+            row.append($('<td></td>').append(dot));
+        }
+        table.find('tbody').append(row);
+    }
+    return $('<div class="ps-grid-scroll"></div>').append(table);
+}
+
+/** Phone layout: one card per secret, with a tappable chip per character. */
+function knowledgeCards(rows) {
+    const list = $('<div class="ps-kcards"></div>');
+    for (const { scene, about, cells } of rows) {
+        const card = $('<div class="ps-kcard"><b></b><small></small><div class="ps-kchips"></div></div>');
+        card.find('b').text(`Scene ${scene.index}`);
+        card.find('small').text(about.length > 110 ? `${about.slice(0, 110)}…` : about);
+        for (const cell of cells) {
+            const pill = $(chip(cell.name)).addClass(`ps-kchip ps-kchip-${cell.state}`).attr('title', cell.title);
+            const icon = { member: 'fa-check', revealed: 'fa-eye', unknown: 'fa-plus' }[cell.state];
+            pill.prepend($('<i class="fa-solid"></i>').addClass(icon));
+            if (cell.detail) pill.append($('<small class="ps-kchip-detail"></small>').text(cell.detail));
+            if (cell.toggle) pill.addClass('ps-clickable').attr('role', 'button').on('click', cell.toggle);
+            card.find('.ps-kchips').append(pill);
+        }
+        list.append(card);
+    }
+    return list;
 }
 
 export async function openKnowledge() {
@@ -499,12 +532,12 @@ function addSceneBar() {
     const bar = $(`
         <div id="ps_scene_bar">
             <span class="ps-pulse"></span>
-            <span class="ps-bar-title"><i class="fa-solid fa-user-secret"></i>Private scene</span>
+            <span class="ps-bar-title"><i class="fa-solid fa-user-secret"></i><span class="ps-bar-label">Private scene</span></span>
             <span class="ps-chips"></span>
             <span class="ps-bar-spacer"></span>
             <div class="ps-bar-button ps-scene-edit" title="Change who is in this scene"><i class="fa-solid fa-user-pen"></i></div>
             <div class="ps-bar-button ps-scene-timeline" title="Open the private timeline"><i class="fa-solid fa-timeline"></i></div>
-            <div class="ps-bar-button ps-scene-end" title="End the scene (and save it to the lorebook if auto-save is on)"><i class="fa-solid fa-door-open"></i><span>End scene</span></div>
+            <div class="ps-bar-button ps-scene-end" title="End the scene (and save it to the lorebook if auto-save is on)"><i class="fa-solid fa-door-open"></i><span class="ps-bar-label">End scene</span></div>
         </div>`);
     $('#send_form').before(bar);
     bar.find('.ps-scene-edit').on('click', onSceneButtonClick);
@@ -542,7 +575,11 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_enabled" type="checkbox"> <span>Enabled</span></label>
                         <label class="checkbox_label"><input id="ps_show_badges" type="checkbox"> <span>Show the “Private” badge on messages</span></label>
                         <label class="checkbox_label"><input id="ps_inline_tags" type="checkbox"> <span>Inline tags in your messages</span></label>
-                        <small><code>@private Ana, Kael:</code> this message and the reply · <code>@scene Ana, Kael:</code> start a scene · <code>@endscene</code> end it</small>
+                        <ul class="ps-tag-help">
+                            <li><code>@private Ana, Kael:</code> this message and the reply</li>
+                            <li><code>@scene Ana, Kael:</code> start a private scene</li>
+                            <li><code>@endscene</code> end it</li>
+                        </ul>
                     </div>
 
                     <div class="ps-section">

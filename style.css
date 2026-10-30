@@ -727,3 +727,219 @@
 #chat .last_mes .ps-leak {
     margin-right: 28px;
 }
+
+/* ── Who knows what: phone cards ─────────────────────────────────── */
+
+.ps-kcards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ps-kcard {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--ps-surface);
+    border: 1px solid var(--ps-border);
+}
+
+.ps-kcard > small {
+    color: var(--ps-muted);
+}
+
+.ps-kchips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ps-kchip {
+    padding: 5px 12px 5px 10px;
+    font-size: 0.9em;
+}
+
+.ps-kchip::before {
+    display: none;
+}
+
+.ps-kchip i {
+    font-size: 0.8em;
+}
+
+.ps-kchip-revealed {
+    border-style: dashed;
+    background: transparent;
+}
+
+.ps-kchip-unknown {
+    opacity: 0.5;
+    filter: saturate(0.3);
+    background: transparent;
+}
+
+.ps-kchip-detail {
+    font-weight: 400;
+    opacity: 0.75;
+}
+
+.ps-kchip.ps-clickable {
+    cursor: pointer;
+}
+
+.ps-kchip.ps-clickable:active {
+    transform: scale(0.95);
+}
+
+/* ── Phones ──────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+    /* Scene bar: one compact row; names scroll sideways. */
+    #ps_scene_bar {
+        flex-wrap: nowrap;
+        gap: 6px;
+        padding: 4px 4px 4px 10px;
+        margin-bottom: 4px;
+        border-radius: 12px;
+    }
+
+    #ps_scene_bar .ps-bar-title .ps-bar-label,
+    #ps_scene_bar .ps-bar-spacer {
+        display: none;
+    }
+
+    #ps_scene_bar .ps-chips {
+        flex: 1;
+        flex-wrap: nowrap;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        /* Fade the edge so it's clear more names scroll into view. */
+        mask-image: linear-gradient(90deg, #000 80%, transparent);
+    }
+
+    #ps_scene_bar .ps-chips::-webkit-scrollbar {
+        display: none;
+    }
+
+    .ps-bar-button {
+        justify-content: center;
+        flex-shrink: 0;
+        min-width: 36px;
+        min-height: 32px;
+        padding: 4px 8px;
+    }
+
+    /* Badge: smaller chips so they fit beside each other. */
+    .ps-badge {
+        gap: 4px;
+    }
+
+    .ps-badge .ps-chip {
+        font-size: 0.75em;
+        padding: 0 7px 0 6px;
+    }
+
+    /* Popups use the full width. */
+    .ps-popup {
+        gap: 10px;
+    }
+
+    .ps-popup-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        font-size: 1em;
+    }
+
+    .ps-popup-header h3 {
+        font-size: 1.05em;
+    }
+
+    .ps-popup-header p {
+        word-break: break-word;
+    }
+
+    .ps-add-row .menu_button span {
+        display: none;
+    }
+
+    /* Timeline: narrower rail, roomier tap targets. */
+    .ps-timeline {
+        padding-left: 28px;
+    }
+
+    .ps-timeline::before {
+        left: 9px;
+    }
+
+    .ps-tl-node {
+        left: -28px;
+        width: 20px;
+        height: 20px;
+        font-size: 0.6em;
+    }
+
+    .ps-tl-card {
+        padding: 10px 11px;
+    }
+
+    .ps-tl-range {
+        flex-basis: 100%;
+        order: 3;
+    }
+
+    .ps-tl-actions .menu_button,
+    .ps-toolbar .menu_button {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-height: 36px;
+    }
+
+    /* Leak warning: buttons get their own full-width row. */
+    .ps-leak-actions {
+        flex-basis: 100%;
+    }
+
+    .ps-leak-actions .menu_button {
+        flex: 1;
+        justify-content: center;
+        min-height: 36px;
+    }
+
+
+    /* Settings */
+    .ps-grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .ps-button-row .menu_button {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+}
+
+/* Touch screens: no hover, so make small targets bigger. */
+@media (pointer: coarse) {
+    .ps-cell {
+        width: 22px;
+        height: 22px;
+    }
+
+    .ps-chip-toggle .ps-chip {
+        padding: 6px 14px 6px 12px;
+    }
+}
+
+.ps-tag-help {
+    margin: 2px 0 0;
+    padding-left: 18px;
+    font-size: 0.85em;
+    color: var(--ps-muted);
+}
+
+.ps-tag-help code {
+    white-space: nowrap;
+}
