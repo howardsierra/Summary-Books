@@ -71,12 +71,14 @@ function renderTabs() {
         threads: chatState().threads.filter(t => t.status === 'open').length,
     };
     for (const [id, icon, label] of TABS) {
-        const button = $('<div class="ps-tab" role="tab" tabindex="0"><i class="fa-solid"></i><span></span></div>');
+        const button = $('<div class="ps-tab" role="tab" tabindex="0"><i class="fa-solid" aria-hidden="true"></i><span></span></div>');
         button.toggleClass('ps-tab-active', id === tab).attr('aria-selected', String(id === tab));
         button.find('i').addClass(icon);
         button.find('span').text(label);
         if (counts[id]) button.append($('<b class="ps-tab-count"></b>').text(counts[id]));
-        button.on('click', () => {
+        button.on('click keydown', (e) => {
+            if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
             tab = id;
             refreshMemory();
         });
@@ -486,7 +488,7 @@ function renderThreads(body) {
     const list = $('<ul class="ps-list"></ul>');
     for (const thread of open) {
         const li = listItem(thread.text, thread.members);
-        li.prepend($('<input type="checkbox" class="ps-list-check" title="Mark as resolved">')
+        li.prepend($('<input type="checkbox" class="ps-list-check" title="Mark as resolved" aria-label="Mark as resolved">')
             .on('change', () => setThreadStatus(thread.id, 'resolved')));
         li.find('.ps-list-main').append($('<small></small>').text(`since msg ${thread.openedAt}`));
         li.find('.ps-list-actions').append(
@@ -530,7 +532,8 @@ function renderFacts(body) {
         const li = listItem(fact.text, fact.members);
         const source = fact.sourceMid ? positions.get(fact.sourceMid) : undefined;
         if (source !== undefined) {
-            li.find('.ps-list-main').append($('<small class="ps-link"></small>').text(`from msg ${source}`).on('click', () => jumpTo(source)));
+            li.find('.ps-list-main').append($('<small class="ps-link" role="button" tabindex="0"><i class="fa-solid fa-location-arrow"></i> </small>')
+                .append(document.createTextNode(`from msg ${source}`)).on('click', () => jumpTo(source)));
         }
         li.find('.ps-list-actions').append(
             actionButton('ps-act-edit', 'fa-pen', '', 'Edit').on('click', async () => {
@@ -554,7 +557,8 @@ function renderSecrets(body) {
         return;
     }
 
-    const compact = window.matchMedia('(max-width: 600px)').matches;
+    // Cards on phones and any touch screen: the table relies on small dots and hover tooltips.
+    const compact = window.matchMedia('(max-width: 600px), (pointer: coarse)').matches;
     const rows = scenes.map(scene => {
         const record = chatState().timeline[scene.id];
         const about = String(record?.summary ?? ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');

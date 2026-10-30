@@ -184,10 +184,11 @@ export function keywordTags(keywords) {
 }
 
 export function actionButton(cls, icon, label, title = '') {
-    const button = $('<div class="menu_button menu_button_icon"><i class="fa-solid"></i></div>');
-    button.addClass(cls).attr('title', title);
+    const button = $('<div class="menu_button menu_button_icon ps-btn" role="button" tabindex="0"><i class="fa-solid" aria-hidden="true"></i></div>');
+    button.addClass(cls).attr('title', title).attr('aria-label', label || title);
     button.find('i').addClass(icon);
     if (label) button.append($('<span></span>').text(label));
+    else button.addClass('ps-btn-icon');
     return button;
 }
 
@@ -294,9 +295,9 @@ function addSceneBar() {
             <span class="ps-bar-title"><i class="fa-solid fa-user-secret"></i><span class="ps-bar-label">Private scene</span></span>
             <span class="ps-chips"></span>
             <span class="ps-bar-spacer"></span>
-            <div class="ps-bar-button ps-scene-edit" title="Change who is in this scene"><i class="fa-solid fa-user-pen"></i></div>
-            <div class="ps-bar-button ps-scene-timeline" title="Open Story Memory"><i class="fa-solid fa-book-open"></i></div>
-            <div class="ps-bar-button ps-scene-end" title="End the scene (and save it to the lorebook if auto-save is on)"><i class="fa-solid fa-door-open"></i><span class="ps-bar-label">End scene</span></div>
+            <div class="ps-bar-button ps-scene-edit" role="button" tabindex="0" title="Change who is in this scene" aria-label="Change who is in this scene"><i class="fa-solid fa-user-pen" aria-hidden="true"></i></div>
+            <div class="ps-bar-button ps-scene-timeline" role="button" tabindex="0" title="Open Story Memory" aria-label="Open Story Memory"><i class="fa-solid fa-book-open" aria-hidden="true"></i></div>
+            <div class="ps-bar-button ps-scene-end" role="button" tabindex="0" title="End the scene (and save it to the lorebook if auto-save is on)" aria-label="End scene"><i class="fa-solid fa-door-open" aria-hidden="true"></i><span class="ps-bar-label">End scene</span></div>
         </div>`);
     $('#send_form').before(bar);
     bar.find('.ps-scene-edit').on('click', onSceneButtonClick);
@@ -374,8 +375,10 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_keywords" type="checkbox"> <span>Ask for keywords (places, objects, events) as extra triggers</span></label>
                         <label class="checkbox_label"><input id="ps_hide_after_save" type="checkbox"> <span>Hide the original messages after saving</span></label>
                         <label class="checkbox_label"><input id="ps_entry_constant" type="checkbox"> <span>Always include secret entries (otherwise when triggered)</span></label>
-                        <label for="ps_summary_prompt">Secret summary instructions</label>
-                        <textarea id="ps_summary_prompt" class="text_pole textarea_compact" rows="4"></textarea>
+                        <details class="ps-advanced">
+                            <summary>Customize the secret summary instructions</summary>
+                            <textarea id="ps_summary_prompt" class="text_pole textarea_compact" rows="4" aria-label="Secret summary instructions"></textarea>
+                        </details>
                     </div>
 
                     <div class="ps-section">
@@ -393,8 +396,10 @@ function addSettingsPanel() {
                         </div>
                         <label class="checkbox_label"><input id="ps_memory_constant" type="checkbox"> <span>Always include story entries (otherwise when triggered)</span></label>
                         <small>Private messages are never included in story memory.</small>
-                        <label for="ps_memory_prompt">Story summary instructions</label>
-                        <textarea id="ps_memory_prompt" class="text_pole textarea_compact" rows="4"></textarea>
+                        <details class="ps-advanced">
+                            <summary>Customize the story summary instructions</summary>
+                            <textarea id="ps_memory_prompt" class="text_pole textarea_compact" rows="4" aria-label="Story summary instructions"></textarea>
+                        </details>
                         <label class="checkbox_label"><input id="ps_consolidate" type="checkbox"> <span>Merge old story entries into chapters (and chapters into arcs)</span></label>
                         <div class="ps-grid-2">
                             <div>
@@ -406,8 +411,10 @@ function addSettingsPanel() {
                                 <input id="ps_consolidate_keep" class="text_pole" type="number" min="0" max="20">
                             </div>
                         </div>
-                        <label for="ps_chapter_prompt">Chapter instructions</label>
-                        <textarea id="ps_chapter_prompt" class="text_pole textarea_compact" rows="3"></textarea>
+                        <details class="ps-advanced">
+                            <summary>Customize the chapter instructions</summary>
+                            <textarea id="ps_chapter_prompt" class="text_pole textarea_compact" rows="3" aria-label="Chapter instructions"></textarea>
+                        </details>
                     </div>
 
                     <div class="ps-section">
@@ -418,7 +425,8 @@ function addSettingsPanel() {
                     </div>
 
                     <div class="ps-section">
-                        <div class="ps-section-title"><i class="fa-solid fa-terminal"></i> Prompt</div>
+                        <details class="ps-advanced ps-advanced-section">
+                            <summary><i class="fa-solid fa-terminal"></i> What the model is told (advanced)</summary>
                         <label for="ps_rules">Rules sent to the model</label>
                         <textarea id="ps_rules" class="text_pole textarea_compact" rows="5"></textarea>
                         <label for="ps_scene_rules">Active scene note (<code>{{members}}</code> = names)</label>
@@ -436,6 +444,7 @@ function addSettingsPanel() {
                         <label for="ps_rules_depth">Rules depth (0 = after the last message)</label>
                         <input id="ps_rules_depth" class="text_pole" type="number" min="0" max="100">
                         <div id="ps_reset" class="menu_button menu_button_icon"><i class="fa-solid fa-rotate-left"></i><span>Restore default text</span></div>
+                        </details>
                     </div>
                 </div>
             </div>

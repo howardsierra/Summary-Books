@@ -1,17 +1,220 @@
+/* Private Scenes
+ *
+ * 1. Tokens            6. Story Memory window   11. Settings panel
+ * 2. Base controls     7. Timeline              12. Phones
+ * 3. Chips             8. Characters            13. Touch screens
+ * 4. Chat              9. Threads & facts
+ * 5. Popups           10. Secrets grid
+ *
+ * Hover effects live in @media (hover: hover) so they never stick after a tap.
+ */
+
+/* ── 1. Tokens ───────────────────────────────────────────────────── */
+
 :root {
     --ps-accent: #a78bfa;
     --ps-accent-strong: #8b5cf6;
-    --ps-accent-soft: color-mix(in srgb, var(--ps-accent) 14%, transparent);
-    --ps-accent-line: color-mix(in srgb, var(--ps-accent) 55%, transparent);
-    --ps-text: var(--SmartThemeBodyColor, #dcdcd2);
-    --ps-muted: color-mix(in srgb, var(--ps-text) 60%, transparent);
-    --ps-surface: color-mix(in srgb, var(--SmartThemeBlurTintColor, #171717) 85%, var(--ps-accent) 6%);
-    --ps-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
     --ps-story: #d4a373;
+    --ps-info: #60a5fa;
+    --ps-ok: #34d399;
     --ps-warn: #f59e0b;
+    --ps-danger: #f87171;
+
+    --ps-text: var(--SmartThemeBodyColor, #dcdcd2);
+    --ps-muted: color-mix(in srgb, var(--ps-text) 62%, transparent);
+    --ps-faint: color-mix(in srgb, var(--ps-text) 8%, transparent);
+    --ps-border: color-mix(in srgb, var(--ps-text) 14%, transparent);
+    /* Mix percentages add up to 100% so cards stay opaque over the chat. */
+    --ps-base: var(--SmartThemeBlurTintColor, #171717);
+    --ps-surface: color-mix(in srgb, var(--ps-base) 95%, var(--ps-accent) 5%);
+
+    --ps-accent-soft: color-mix(in srgb, var(--ps-accent) 14%, transparent);
+    --ps-accent-line: color-mix(in srgb, var(--ps-accent) 50%, transparent);
+
+    --ps-radius-sm: 8px;
+    --ps-radius: 12px;
+    --ps-radius-lg: 16px;
+    --ps-pill: 999px;
+    --ps-gap: 10px;
+    --ps-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+    --ps-shadow: 0 6px 22px rgb(0 0 0 / 0.22);
+
+    /* Minimum tap size; raised on touch screens (section 13). */
+    --ps-tap: 30px;
 }
 
-/* ── Character chips ─────────────────────────────────────────────── */
+/* ── 2. Base controls ────────────────────────────────────────────── */
+
+/* Everything you can tap: no grey flash, no double-tap zoom delay. */
+.ps-btn,
+.ps-bar-button,
+.ps-tab,
+.ps-chip-toggle,
+.ps-kchip.ps-clickable,
+.ps-cell.ps-clickable,
+.ps-link,
+.ps-list-check,
+.ps-advanced > summary,
+.ps-resolved > summary,
+.mes_button.ps_toggle,
+.mes_button.ps_pin {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.ps-btn.menu_button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: var(--ps-tap);
+    margin: 0;
+    padding: 4px 12px;
+    border-radius: var(--ps-pill);
+    font-size: 0.86em;
+    white-space: nowrap;
+    color: var(--ps-text);
+    background: var(--ps-faint);
+    border: 1px solid transparent;
+    filter: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s var(--ps-ease);
+}
+
+.ps-btn.menu_button i {
+    font-size: 0.95em;
+    opacity: 0.9;
+}
+
+.ps-btn.ps-btn-icon {
+    min-width: var(--ps-tap);
+    padding: 4px 9px;
+}
+
+.ps-btn:active,
+.ps-bar-button:active,
+.ps-chip-toggle:active .ps-chip,
+.ps-kchip.ps-clickable:active {
+    transform: scale(0.96);
+}
+
+.ps-btn.disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* Primary: the main thing a card or toolbar is for. */
+.ps-btn.ps-act-save,
+.ps-btn.ps-act-approve,
+.ps-btn.ps-save-all,
+.ps-btn.ps-leak-regen {
+    color: color-mix(in srgb, var(--ps-accent) 70%, var(--ps-text));
+    background: var(--ps-accent-soft);
+    border-color: var(--ps-accent-line);
+}
+
+.ps-btn.ps-save-story,
+.ps-kind-memory .ps-btn.ps-act-save {
+    color: color-mix(in srgb, var(--ps-story) 70%, var(--ps-text));
+    background: color-mix(in srgb, var(--ps-story) 14%, transparent);
+    border-color: color-mix(in srgb, var(--ps-story) 45%, transparent);
+}
+
+.ps-btn.ps-act-keep {
+    color: color-mix(in srgb, var(--ps-ok) 70%, var(--ps-text));
+}
+
+/* Destructive: quiet, and pushed to the far end of its row. */
+.ps-tl-actions .ps-act-remove,
+.ps-draft .ps-act-remove {
+    margin-left: auto;
+}
+
+.ps-btn.ps-act-remove {
+    color: var(--ps-muted);
+    background: transparent;
+}
+
+.ps-hint,
+.ps-tag-help {
+    color: var(--ps-muted);
+    font-size: 0.85em;
+    line-height: 1.45;
+}
+
+.ps-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    padding: 1px 8px;
+    border-radius: var(--ps-pill);
+    cursor: pointer;
+    background: var(--ps-faint);
+}
+
+.ps-link i {
+    font-size: 0.85em;
+}
+
+.ps-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--ps-muted);
+    border: 1px dashed var(--ps-border);
+    border-radius: var(--ps-radius);
+}
+
+.ps-empty > i {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    margin-bottom: 4px;
+    border-radius: 50%;
+    font-size: 1.4em;
+    color: var(--ps-accent);
+    background: var(--ps-accent-soft);
+}
+
+.ps-empty b {
+    color: var(--ps-text);
+}
+
+.ps-empty span {
+    max-width: 380px;
+    line-height: 1.45;
+}
+
+@keyframes ps-pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ps-accent) 70%, transparent); }
+    70% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes ps-slide-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ps-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ps-pulse,
+    #ps_scene_bar,
+    .ps-leak,
+    .ps-tab-body > * {
+        animation: none !important;
+    }
+}
+
+/* ── 3. Chips ────────────────────────────────────────────────────── */
 
 .ps-chips {
     display: inline-flex;
@@ -25,32 +228,38 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 1px 9px 1px 7px;
-    border-radius: 999px;
+    padding: 1px 10px 1px 8px;
+    border-radius: var(--ps-pill);
     font-size: 0.82em;
     font-weight: 600;
     line-height: 1.6;
-    color: color-mix(in srgb, hsl(var(--ps-hue) 70% 62%) 65%, var(--ps-text));
-    background: hsl(var(--ps-hue) 60% 50% / 0.16);
-    border: 1px solid hsl(var(--ps-hue) 60% 60% / 0.45);
     white-space: nowrap;
+    color: color-mix(in srgb, hsl(var(--ps-hue) 70% 64%) 66%, var(--ps-text));
+    background: hsl(var(--ps-hue) 60% 50% / 0.15);
+    border: 1px solid hsl(var(--ps-hue) 60% 60% / 0.42);
 }
 
 .ps-chip::before {
     content: '';
+    flex-shrink: 0;
     width: 7px;
     height: 7px;
     border-radius: 50%;
     background: hsl(var(--ps-hue) 75% 62%);
-    box-shadow: 0 0 6px hsl(var(--ps-hue) 75% 62% / 0.8);
+    box-shadow: 0 0 6px hsl(var(--ps-hue) 75% 62% / 0.75);
 }
 
-/* ── Private messages in chat ────────────────────────────────────── */
+.ps-chip.ps-chip-revealed {
+    border-style: dashed;
+    background: transparent;
+}
+
+/* ── 4. Chat ─────────────────────────────────────────────────────── */
 
 #chat .mes.ps-private {
-    background: linear-gradient(90deg, var(--ps-accent-soft), transparent 70%);
+    background: linear-gradient(90deg, var(--ps-accent-soft), transparent 75%);
     box-shadow: inset 3px 0 0 var(--ps-accent);
-    border-radius: 10px;
+    border-radius: var(--ps-radius);
 }
 
 .ps-badge {
@@ -65,35 +274,100 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 0.72em;
+    font-size: 0.7em;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
     color: var(--ps-accent);
 }
 
-.mes_button.ps_toggle:hover {
-    color: var(--ps-accent);
+.ps-badge-later {
+    font-size: 0.75em;
+    color: var(--ps-muted);
 }
 
-/* ── Scene bar above the input ───────────────────────────────────── */
+.ps-checking {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 2px 10px;
+    border-radius: var(--ps-pill);
+    font-size: 0.78em;
+    color: var(--ps-muted);
+    background: var(--ps-faint);
+}
 
+/* Leak warning */
+.ps-leak {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: var(--ps-radius);
+    background: color-mix(in srgb, var(--ps-warn) 11%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ps-warn) 50%, transparent);
+    animation: ps-slide-in 0.25s var(--ps-ease);
+}
+
+.ps-leak-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: var(--ps-warn);
+    background: color-mix(in srgb, var(--ps-warn) 18%, transparent);
+}
+
+.ps-leak-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 180px;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.ps-leak-text b {
+    color: var(--ps-warn);
+}
+
+.ps-leak-text small {
+    color: var(--ps-muted);
+}
+
+.ps-leak-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* Keep clear of the swipe arrow on the latest message. */
+#chat .last_mes .ps-leak {
+    margin-right: 28px;
+}
+
+/* Scene bar above the input */
 #ps_scene_bar {
     display: none;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
     margin: 0 0 6px;
-    padding: 6px 8px 6px 12px;
-    border-radius: 14px;
+    padding: 6px 6px 6px 12px;
+    border-radius: var(--ps-radius-lg);
     color: var(--ps-text);
     background:
         linear-gradient(100deg, color-mix(in srgb, var(--ps-accent) 26%, transparent), color-mix(in srgb, var(--ps-accent) 6%, transparent) 70%),
-        var(--SmartThemeBlurTintColor, rgba(23, 23, 23, 0.8));
+        var(--SmartThemeBlurTintColor, rgba(23, 23, 23, 0.85));
     border: 1px solid var(--ps-accent-line);
-    box-shadow: 0 4px 18px color-mix(in srgb, var(--ps-accent) 22%, transparent);
+    box-shadow: 0 4px 18px color-mix(in srgb, var(--ps-accent) 20%, transparent);
     backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
-    animation: ps-slide-in 0.25s ease-out;
+    animation: ps-slide-in 0.25s var(--ps-ease);
 }
 
 #ps_scene_bar.ps-visible {
@@ -101,13 +375,12 @@
 }
 
 .ps-pulse {
+    flex-shrink: 0;
     width: 9px;
     height: 9px;
     border-radius: 50%;
     background: var(--ps-accent);
-    box-shadow: 0 0 0 0 var(--ps-accent);
     animation: ps-pulse 1.8s infinite;
-    flex-shrink: 0;
 }
 
 .ps-bar-title {
@@ -125,38 +398,25 @@
 .ps-bar-button {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
+    min-width: var(--ps-tap);
+    min-height: var(--ps-tap);
+    padding: 4px 11px;
+    border-radius: var(--ps-pill);
     font-size: 0.85em;
     cursor: pointer;
     color: var(--ps-text);
-    background: color-mix(in srgb, var(--ps-text) 8%, transparent);
+    background: var(--ps-faint);
     border: 1px solid transparent;
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.ps-bar-button:hover {
-    background: var(--ps-accent-soft);
-    border-color: var(--ps-accent-line);
+    transition: background 0.15s, border-color 0.15s, transform 0.1s var(--ps-ease);
 }
 
 .ps-scene-end {
     background: color-mix(in srgb, var(--ps-accent) 30%, transparent);
 }
 
-@keyframes ps-pulse {
-    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ps-accent) 70%, transparent); }
-    70% { box-shadow: 0 0 0 8px transparent; }
-    100% { box-shadow: 0 0 0 0 transparent; }
-}
-
-@keyframes ps-slide-in {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: none; }
-}
-
-/* ── Popups ──────────────────────────────────────────────────────── */
+/* ── 5. Popups ───────────────────────────────────────────────────── */
 
 .ps-popup {
     display: flex;
@@ -165,41 +425,56 @@
     text-align: left;
 }
 
+.ps-popup label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.9em;
+}
+
 .ps-popup-header {
     display: flex;
     align-items: center;
     gap: 12px;
 }
 
+.ps-popup-titles {
+    min-width: 0;
+}
+
 .ps-popup-header h3 {
     margin: 0;
     font-size: 1.15em;
+    line-height: 1.25;
 }
 
 .ps-popup-header p {
-    margin: 2px 0 0;
+    margin: 3px 0 0;
     font-size: 0.85em;
+    line-height: 1.4;
     color: var(--ps-muted);
+    overflow-wrap: anywhere;
 }
 
 .ps-popup-icon {
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--ps-radius);
     font-size: 1.2em;
     color: #fff;
     background: linear-gradient(135deg, var(--ps-accent), var(--ps-accent-strong));
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--ps-accent) 40%, transparent);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--ps-accent) 38%, transparent);
 }
 
+/* Name picker */
 .ps-chip-grid {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    min-height: 30px;
+    min-height: 32px;
 }
 
 .ps-chip-toggle {
@@ -208,19 +483,18 @@
 }
 
 .ps-chip-toggle input {
-    display: none;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .ps-chip-toggle .ps-chip {
+    min-height: var(--ps-tap);
+    padding: 4px 14px 4px 11px;
     font-size: 0.95em;
-    padding: 4px 12px 4px 10px;
     opacity: 0.55;
     filter: saturate(0.4);
-    transition: opacity 0.15s, filter 0.15s, transform 0.1s;
-}
-
-.ps-chip-toggle .ps-chip:hover {
-    opacity: 0.85;
+    transition: opacity 0.15s, filter 0.15s, background 0.15s, transform 0.1s var(--ps-ease);
 }
 
 .ps-chip-toggle .ps-check {
@@ -242,14 +516,15 @@
     display: inline;
 }
 
-.ps-chip-toggle:active .ps-chip {
-    transform: scale(0.96);
+.ps-chip-toggle input:focus-visible + .ps-chip {
+    outline: 2px solid var(--ps-accent);
+    outline-offset: 2px;
 }
 
 .ps-add-row {
     display: flex;
-    gap: 6px;
     align-items: center;
+    gap: 6px;
 }
 
 .ps-add-row .text_pole {
@@ -262,97 +537,203 @@
     white-space: nowrap;
 }
 
-.ps-hint {
-    color: var(--ps-muted);
+/* ── 6. Story Memory window ──────────────────────────────────────── */
+
+.ps-memory {
+    text-align: left;
 }
 
-/* ── Timeline ────────────────────────────────────────────────────── */
+.ps-clock-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
 
-.ps-tl-body {
+.ps-clock-row:empty {
+    display: none;
+}
+
+.ps-clock-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 3px 11px;
+    border-radius: var(--ps-pill);
+    font-size: 0.86em;
+    background: var(--ps-faint);
+}
+
+/* One line: long times or places shorten with an ellipsis. */
+.ps-clock-item span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.ps-clock-row .ps-btn {
+    flex-shrink: 0;
+    background: transparent;
+}
+
+.ps-clock-item i {
+    color: var(--ps-accent);
+}
+
+.ps-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--ps-border);
+}
+
+.ps-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.ps-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 6px 14px;
+    margin-bottom: -1px;
+    cursor: pointer;
+    color: var(--ps-muted);
+    border-bottom: 2px solid transparent;
+    border-radius: var(--ps-radius-sm) var(--ps-radius-sm) 0 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.ps-tab.ps-tab-active {
+    color: var(--ps-text);
+    border-bottom-color: var(--ps-accent);
+}
+
+.ps-tab.ps-tab-active i {
+    color: var(--ps-accent);
+}
+
+.ps-tab:focus-visible {
+    outline: 2px solid var(--ps-accent);
+    outline-offset: -2px;
+}
+
+.ps-tab-count {
+    min-width: 19px;
+    padding: 0 6px;
+    border-radius: var(--ps-pill);
+    font-size: 0.72em;
+    line-height: 1.65;
+    text-align: center;
+    color: #fff;
+    background: var(--ps-accent-strong);
+}
+
+.ps-tab-body {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
+    min-height: 140px;
 }
 
-.ps-save-all {
-    align-self: flex-start;
-    margin: 0;
-    background: var(--ps-accent-soft);
-    border-color: var(--ps-accent-line);
+.ps-tab-body > * {
+    animation: ps-fade-in 0.2s ease-out;
 }
 
-.ps-timeline {
-    position: relative;
-    list-style: none;
-    margin: 0;
-    padding: 0 0 0 38px;
+.ps-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 
-.ps-timeline::before {
-    content: '';
-    position: absolute;
-    left: 13px;
-    top: 14px;
-    bottom: 14px;
-    width: 2px;
-    border-radius: 2px;
-    background: linear-gradient(var(--ps-accent), color-mix(in srgb, var(--ps-accent) 15%, transparent));
-}
-
-.ps-tl-item {
-    position: relative;
-    margin-bottom: 12px;
-}
-
-.ps-tl-node {
-    position: absolute;
-    left: -36px;
-    top: 10px;
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    font-size: 0.7em;
-    color: var(--ps-accent);
-    background: var(--SmartThemeBlurTintColor, #171717);
-    border: 2px solid var(--ps-accent);
-}
-
-.ps-tl-item.ps-saved .ps-tl-node {
-    color: #fff;
-    background: var(--ps-accent);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--ps-accent) 70%, transparent);
-}
-
-.ps-kind-memory {
-    --ps-accent: var(--ps-story);
-}
-
-.ps-kind-memory .ps-tl-card {
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #171717) 88%, var(--ps-story) 6%);
-}
-
-.ps-tl-card {
+.ps-section-block {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: var(--ps-surface);
-    border: 1px solid var(--ps-border);
-    transition: border-color 0.15s, transform 0.15s;
 }
 
-.ps-tl-card:hover {
-    border-color: var(--ps-accent-line);
+.ps-section-block h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 0;
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ps-muted);
+}
+
+.ps-section-block h4 i {
+    color: var(--ps-accent);
+}
+
+.ps-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--ps-radius);
+    font-size: 0.9em;
+    line-height: 1.45;
+}
+
+.ps-notice-warn {
+    background: color-mix(in srgb, var(--ps-warn) 11%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ps-warn) 42%, transparent);
+}
+
+.ps-notice-warn i {
+    margin-top: 3px;
+    color: var(--ps-warn);
+}
+
+/* Status pills */
+.ps-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 9px;
+    border-radius: var(--ps-pill);
+    font-size: 0.74em;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--ps-status, var(--ps-muted));
+    background: color-mix(in srgb, var(--ps-status, var(--ps-muted)) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ps-status, var(--ps-muted)) 45%, transparent);
+}
+
+.ps-status-saved { --ps-status: color-mix(in srgb, var(--ps-ok) 80%, var(--ps-text)); }
+.ps-status-unsaved { --ps-status: var(--ps-muted); }
+.ps-status-changed,
+.ps-status-stale { --ps-status: var(--ps-warn); }
+.ps-status-saving { --ps-status: var(--ps-accent); }
+.ps-status-review { --ps-status: var(--ps-info); }
+
+/* Cards shared by the timeline, review queue and characters */
+.ps-tl-card,
+.ps-draft,
+.ps-sheet,
+.ps-kcard {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 13px 15px;
+    border-radius: var(--ps-radius);
+    background: var(--ps-surface);
+    border: 1px solid var(--ps-border);
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .ps-tl-top {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
-    gap: 8px;
+    align-items: center;
+    gap: 6px 8px;
 }
 
 .ps-tl-title {
@@ -361,30 +742,14 @@
 }
 
 .ps-tl-range {
+    flex: 1;
     font-size: 0.8em;
     color: var(--ps-muted);
-    flex: 1;
 }
-
-.ps-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 1px 9px;
-    border-radius: 999px;
-    font-size: 0.75em;
-    font-weight: 600;
-    border: 1px solid currentColor;
-}
-
-.ps-status-saved { color: #6ee7b7; }
-.ps-status-unsaved { color: var(--ps-muted); }
-.ps-status-changed { color: #fbbf24; }
-.ps-status-saving { color: var(--ps-accent); }
 
 .ps-tl-summary {
     margin: 0;
-    line-height: 1.5;
+    line-height: 1.55;
     white-space: pre-wrap;
 }
 
@@ -403,117 +768,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-}
-
-.ps-tl-actions .menu_button {
-    margin: 0;
-    padding: 3px 10px;
-    font-size: 0.85em;
-}
-
-.ps-tl-actions .ps-act-remove:hover {
-    color: #f87171;
-}
-
-.ps-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 28px 12px;
-    text-align: center;
-    color: var(--ps-muted);
-    border: 1px dashed var(--ps-border);
-    border-radius: 12px;
-}
-
-.ps-empty > i {
-    font-size: 2.2em;
-    color: var(--ps-accent);
-    opacity: 0.7;
-}
-
-.ps-empty b {
-    color: var(--ps-text);
-}
-
-/* ── Settings panel ──────────────────────────────────────────────── */
-
-.private-scenes-settings .inline-drawer-header b i {
-    color: var(--ps-accent);
-    margin-right: 4px;
-}
-
-.private-scenes-settings .ps-section {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--ps-border);
-}
-
-.private-scenes-settings .ps-section:last-child {
-    border-bottom: none;
-}
-
-.private-scenes-settings .ps-section-title {
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.private-scenes-settings .ps-section-title i {
-    color: var(--ps-accent);
-    width: 1.2em;
-}
-
-.private-scenes-settings small {
-    color: var(--ps-muted);
-}
-
-.private-scenes-settings textarea,
-.private-scenes-settings input.text_pole {
-    width: 100%;
-}
-
-.ps-button-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-
-.ps-button-row .menu_button {
-    margin: 0;
-}
-
-.ps-grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-#ps_scene_status {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    min-height: 24px;
-}
-
-#ps_reset {
-    align-self: flex-start;
-    margin-top: 6px;
-}
-
-/* ── Reveals ─────────────────────────────────────────────────────── */
-
-.ps-chip.ps-chip-revealed {
-    border-style: dashed;
-    background: transparent;
-}
-
-.ps-badge-later {
-    font-size: 0.75em;
-    color: var(--ps-muted);
+    padding-top: 2px;
 }
 
 .ps-tl-learned {
@@ -524,8 +779,6 @@
     font-size: 0.85em;
     color: var(--ps-muted);
 }
-
-/* ── Keywords & toolbar ──────────────────────────────────────────── */
 
 .ps-keywords {
     display: flex;
@@ -541,95 +794,361 @@
     padding: 0 8px;
     border-radius: 6px;
     font-size: 0.75em;
-    line-height: 1.7;
+    line-height: 1.75;
     color: var(--ps-muted);
-    background: color-mix(in srgb, var(--ps-text) 8%, transparent);
+    background: var(--ps-faint);
 }
 
 .ps-keyword::before {
     content: '# ';
-    opacity: 0.6;
+    opacity: 0.55;
 }
 
-.ps-toolbar {
+.ps-card-clock {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-}
-
-.ps-toolbar .menu_button {
-    margin: 0;
-}
-
-.ps-toolbar .ps-save-all {
-    background: var(--ps-accent-soft);
-    border-color: var(--ps-accent-line);
-}
-
-.ps-toolbar .ps-save-story {
-    background: color-mix(in srgb, var(--ps-story) 16%, transparent);
-    border-color: color-mix(in srgb, var(--ps-story) 50%, transparent);
-}
-
-/* ── Leak checker ────────────────────────────────────────────────── */
-
-.ps-checking {
-    margin-top: 6px;
-    font-size: 0.8em;
+    gap: 4px 14px;
+    font-size: 0.78em;
     color: var(--ps-muted);
 }
 
-.ps-leak {
+.ps-card-clock i {
+    opacity: 0.8;
+}
+
+/* Review drafts */
+.ps-draft {
+    background: color-mix(in srgb, var(--ps-info) 7%, var(--ps-surface));
+    border: 1px dashed color-mix(in srgb, var(--ps-info) 55%, transparent);
+}
+
+.ps-draft-extras {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.85em;
+    color: var(--ps-muted);
+}
+
+/* ── 7. Timeline ─────────────────────────────────────────────────── */
+
+.ps-timeline {
+    position: relative;
+    margin: 0;
+    padding: 0 0 0 40px;
+    list-style: none;
+}
+
+.ps-timeline::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 16px;
+    bottom: 16px;
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(var(--ps-accent), color-mix(in srgb, var(--ps-accent) 12%, transparent));
+}
+
+.ps-tl-item {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.ps-tl-item:last-child {
+    margin-bottom: 0;
+}
+
+.ps-tl-node {
+    position: absolute;
+    left: -38px;
+    top: 12px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: 0.7em;
+    color: var(--ps-accent);
+    background: var(--SmartThemeBlurTintColor, #171717);
+    border: 2px solid var(--ps-accent);
+}
+
+.ps-tl-item.ps-saved .ps-tl-node {
+    color: #fff;
+    background: var(--ps-accent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--ps-accent) 65%, transparent);
+}
+
+.ps-kind-memory {
+    --ps-accent: var(--ps-story);
+}
+
+.ps-kind-memory .ps-tl-card {
+    background: color-mix(in srgb, var(--ps-base) 94%, var(--ps-story) 6%);
+}
+
+.ps-kind-memory.ps-level-1 .ps-tl-card,
+.ps-kind-memory.ps-level-2 .ps-tl-card {
+    border-left: 4px solid var(--ps-story);
+}
+
+.ps-tl-item.ps-stale .ps-tl-node {
+    color: var(--ps-warn);
+    border-color: var(--ps-warn);
+    background: var(--SmartThemeBlurTintColor, #171717);
+    box-shadow: none;
+}
+
+.ps-tl-item.ps-stale .ps-tl-card {
+    border-color: color-mix(in srgb, var(--ps-warn) 45%, transparent);
+}
+
+/* ── 8. Characters ───────────────────────────────────────────────── */
+
+.ps-sheets {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--ps-gap);
+}
+
+.ps-sheet-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ps-sheet-top .ps-chip {
+    padding: 3px 12px 3px 10px;
+    font-size: 1em;
+}
+
+.ps-sheet-top small,
+.ps-rel-history {
+    font-size: 0.78em;
+    color: var(--ps-muted);
+}
+
+.ps-sheet-state {
+    margin: 0;
+    line-height: 1.55;
+}
+
+.ps-sheet-state.ps-preview {
+    font-style: italic;
+    color: var(--ps-muted);
+}
+
+.ps-sheet-rels {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 9px 0 0;
+    list-style: none;
+    font-size: 0.88em;
+    border-top: 1px solid var(--ps-border);
+}
+
+.ps-sheet-rels li {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
-    margin-top: 8px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--ps-warn) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--ps-warn) 55%, transparent);
-    animation: ps-slide-in 0.25s ease-out;
+    gap: 4px 8px;
 }
 
-.ps-leak-icon {
-    font-size: 1.2em;
-    color: var(--ps-warn);
+.ps-sheet-rels .ps-rel-history {
+    flex-basis: 100%;
+    padding-left: 2px;
 }
 
-.ps-leak-text {
+.ps-rel-list {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-width: 180px;
-    font-size: 0.9em;
-}
-
-.ps-leak-text b {
-    color: var(--ps-warn);
-}
-
-.ps-leak-text small {
-    color: var(--ps-muted);
-}
-
-.ps-leak-actions {
-    display: flex;
     gap: 6px;
 }
 
-.ps-leak-actions .menu_button {
-    margin: 0;
-    padding: 3px 10px;
-    font-size: 0.85em;
+.ps-rel-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 8px 12px;
+    border-radius: var(--ps-radius-sm);
+    background: var(--ps-faint);
 }
 
-/* ── Who knows what ──────────────────────────────────────────────── */
+.ps-rel-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ps-rel-pair i {
+    font-size: 0.75em;
+    color: var(--ps-muted);
+}
+
+.ps-rel-row .ps-rel-history {
+    flex-basis: 100%;
+}
+
+/* ── 9. Threads & facts ──────────────────────────────────────────── */
+
+.ps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ps-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--ps-radius);
+    background: var(--ps-surface);
+    border: 1px solid var(--ps-border);
+}
+
+/*
+ * Round check that ticks a thread off. The input is the whole tap area; the
+ * visible ring is drawn smaller in its middle. Beats SillyTavern's
+ * input[type='checkbox'] rules.
+ */
+input[type='checkbox'].ps-list-check {
+    --ps-ring: color-mix(in srgb, var(--ps-text) 38%, transparent);
+    --ps-check-r: 11px;
+    appearance: none;
+    -webkit-appearance: none;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    margin: -3px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    outline: none;
+    box-shadow: none;
+    filter: none;
+    transform: none;
+    background: radial-gradient(circle, transparent calc(var(--ps-check-r) - 2px), var(--ps-ring) calc(var(--ps-check-r) - 2px) var(--ps-check-r), transparent var(--ps-check-r));
+    transition: background 0.15s;
+}
+
+input[type='checkbox'].ps-list-check::before {
+    content: none;
+}
+
+input[type='checkbox'].ps-list-check::after {
+    content: '';
+    width: 6px;
+    height: 10px;
+    margin-top: -2px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) scale(0);
+    transition: transform 0.15s var(--ps-ease);
+}
+
+input[type='checkbox'].ps-list-check:checked {
+    background: radial-gradient(circle, var(--ps-ok) var(--ps-check-r), transparent var(--ps-check-r));
+}
+
+input[type='checkbox'].ps-list-check:checked::after {
+    transform: rotate(45deg) scale(1);
+}
+
+input[type='checkbox'].ps-list-check:focus-visible {
+    outline: 2px solid var(--ps-accent);
+    outline-offset: -2px;
+}
+
+.ps-list-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.ps-list-text {
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.ps-list-main small {
+    font-size: 0.78em;
+    color: var(--ps-muted);
+}
+
+.ps-list-done .ps-list-text {
+    font-style: italic;
+    color: var(--ps-muted);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--ps-text) 30%, transparent);
+}
+
+.ps-list-private {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+    color: var(--ps-accent);
+}
+
+.ps-list-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.ps-list-actions .ps-btn.menu_button {
+    color: var(--ps-muted);
+    background: transparent;
+    border-color: var(--ps-border);
+}
+
+.ps-resolved > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--ps-tap);
+    margin-bottom: 6px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--ps-muted);
+}
+
+.ps-resolved > summary::-webkit-details-marker {
+    display: none;
+}
+
+.ps-resolved > summary::before {
+    content: '\f054';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 0.7em;
+    transition: transform 0.2s var(--ps-ease);
+}
+
+.ps-resolved[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+/* ── 10. Secrets grid ────────────────────────────────────────────── */
 
 .ps-grid-scroll {
     overflow-x: auto;
     border: 1px solid var(--ps-border);
-    border-radius: 12px;
+    border-radius: var(--ps-radius);
 }
 
 .ps-grid {
@@ -640,7 +1159,7 @@
 
 .ps-grid th,
 .ps-grid td {
-    padding: 8px 10px;
+    padding: 9px 10px;
     text-align: center;
     border-bottom: 1px solid var(--ps-border);
 }
@@ -649,14 +1168,10 @@
     border-bottom: none;
 }
 
-.ps-grid tbody tr:hover {
-    background: var(--ps-accent-soft);
-}
-
 .ps-grid .ps-grid-secret {
-    text-align: left;
     min-width: 160px;
     max-width: 260px;
+    text-align: left;
 }
 
 .ps-grid td.ps-grid-secret {
@@ -688,20 +1203,12 @@
 }
 
 .ps-cell-unknown {
-    border: 2px solid color-mix(in srgb, var(--ps-text) 18%, transparent);
+    border: 2px solid color-mix(in srgb, var(--ps-text) 20%, transparent);
 }
 
 .ps-cell.ps-clickable {
     cursor: pointer;
-    transition: transform 0.1s;
-}
-
-.ps-cell.ps-clickable:hover {
-    transform: scale(1.25);
-}
-
-.ps-cell-unknown.ps-clickable:hover {
-    border-color: var(--ps-accent);
+    transition: transform 0.1s var(--ps-ease), border-color 0.15s;
 }
 
 .ps-grid-legend {
@@ -723,31 +1230,16 @@
     height: 12px;
 }
 
-/* Keep clear of the swipe arrow on the latest message. */
-#chat .last_mes .ps-leak {
-    margin-right: 28px;
-}
-
-/* ── Who knows what: phone cards ─────────────────────────────────── */
-
+/* Card layout (phones and touch screens) */
 .ps-kcards {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-}
-
-.ps-kcard {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background: var(--ps-surface);
-    border: 1px solid var(--ps-border);
+    gap: var(--ps-gap);
 }
 
 .ps-kcard > small {
     color: var(--ps-muted);
+    line-height: 1.45;
 }
 
 .ps-kchips {
@@ -757,8 +1249,10 @@
 }
 
 .ps-kchip {
-    padding: 5px 12px 5px 10px;
+    min-height: var(--ps-tap);
+    padding: 4px 13px 4px 11px;
     font-size: 0.9em;
+    transition: transform 0.1s var(--ps-ease), opacity 0.15s;
 }
 
 .ps-kchip::before {
@@ -789,20 +1283,236 @@
     cursor: pointer;
 }
 
-.ps-kchip.ps-clickable:active {
-    transform: scale(0.95);
+/* ── 11. Settings panel ──────────────────────────────────────────── */
+
+.private-scenes-settings .inline-drawer-header b i {
+    margin-right: 4px;
+    color: var(--ps-accent);
 }
 
-/* ── Phones ──────────────────────────────────────────────────────── */
+.private-scenes-settings .ps-section {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--ps-border);
+}
+
+.private-scenes-settings .ps-section:last-child {
+    border-bottom: none;
+}
+
+.private-scenes-settings .ps-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    font-weight: 700;
+}
+
+.private-scenes-settings .ps-section-title i,
+.ps-advanced-section > summary i {
+    width: 1.2em;
+    text-align: center;
+    color: var(--ps-accent);
+}
+
+.private-scenes-settings small {
+    color: var(--ps-muted);
+    line-height: 1.45;
+}
+
+.private-scenes-settings .checkbox_label {
+    min-height: 28px;
+}
+
+.private-scenes-settings textarea,
+.private-scenes-settings input.text_pole {
+    width: 100%;
+}
+
+.ps-tag-help {
+    margin: 2px 0 0;
+    padding-left: 18px;
+}
+
+.ps-tag-help code {
+    white-space: nowrap;
+}
+
+.ps-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ps-button-row .menu_button {
+    margin: 0;
+}
+
+.ps-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+#ps_scene_status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-height: 26px;
+}
+
+.ps-clock-settings {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px 6px 12px;
+    border-radius: var(--ps-radius-sm);
+    background: var(--ps-faint);
+}
+
+.ps-clock-settings span {
+    flex: 1;
+}
+
+.ps-clock-settings .menu_button {
+    margin: 0;
+}
+
+/* Collapsible prompt text */
+.ps-advanced {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ps-advanced > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: var(--ps-tap);
+    cursor: pointer;
+    list-style: none;
+    font-size: 0.88em;
+    color: var(--ps-muted);
+}
+
+.ps-advanced > summary::-webkit-details-marker {
+    display: none;
+}
+
+.ps-advanced > summary::after {
+    content: '\f078';
+    margin-left: auto;
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 0.75em;
+    transition: transform 0.2s var(--ps-ease);
+}
+
+.ps-advanced[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.ps-advanced[open] > summary {
+    margin-bottom: 4px;
+    color: var(--ps-text);
+}
+
+.ps-advanced-section > summary {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--ps-text);
+}
+
+.ps-advanced-section[open] {
+    gap: 5px;
+}
+
+#ps_reset {
+    align-self: flex-start;
+    margin-top: 6px;
+}
+
+/* ── Hover (mouse and trackpad only) ─────────────────────────────── */
+
+@media (hover: hover) {
+    .ps-btn.menu_button:hover {
+        background: color-mix(in srgb, var(--ps-text) 14%, transparent);
+    }
+
+    .ps-btn.ps-act-save:hover,
+    .ps-btn.ps-act-approve:hover,
+    .ps-btn.ps-save-all:hover,
+    .ps-btn.ps-leak-regen:hover {
+        background: color-mix(in srgb, var(--ps-accent) 26%, transparent);
+    }
+
+    .ps-btn.ps-act-remove:hover {
+        color: var(--ps-danger);
+        background: color-mix(in srgb, var(--ps-danger) 12%, transparent);
+    }
+
+    .ps-bar-button:hover {
+        background: var(--ps-accent-soft);
+        border-color: var(--ps-accent-line);
+    }
+
+    .mes_button.ps_toggle:hover,
+    .mes_button.ps_pin:hover {
+        color: var(--ps-accent);
+    }
+
+    .ps-chip-toggle:hover .ps-chip {
+        opacity: 0.85;
+    }
+
+    .ps-tab:hover {
+        color: var(--ps-text);
+        background: var(--ps-faint);
+    }
+
+    .ps-tl-card:hover,
+    .ps-sheet:hover {
+        border-color: var(--ps-accent-line);
+        box-shadow: var(--ps-shadow);
+    }
+
+    input[type='checkbox'].ps-list-check:not(:checked):hover {
+        --ps-ring: var(--ps-ok);
+    }
+
+    .ps-grid tbody tr:hover {
+        background: var(--ps-accent-soft);
+    }
+
+    .ps-cell.ps-clickable:hover {
+        transform: scale(1.25);
+    }
+
+    .ps-cell-unknown.ps-clickable:hover {
+        border-color: var(--ps-accent);
+    }
+
+    .ps-link:hover,
+    .ps-advanced > summary:hover,
+    .ps-resolved > summary:hover {
+        color: var(--ps-text);
+    }
+}
+
+/* ── 12. Phones ──────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {
-    /* Scene bar: one compact row; names scroll sideways. */
+    /* Scene bar: one compact row; names scroll sideways with a fade. */
     #ps_scene_bar {
         flex-wrap: nowrap;
         gap: 6px;
         padding: 4px 4px 4px 10px;
         margin-bottom: 4px;
-        border-radius: 12px;
+        border-radius: var(--ps-radius);
     }
 
     #ps_scene_bar .ps-bar-title .ps-bar-label,
@@ -816,7 +1526,6 @@
         min-width: 0;
         overflow-x: auto;
         scrollbar-width: none;
-        /* Fade the edge so it's clear more names scroll into view. */
         mask-image: linear-gradient(90deg, #000 80%, transparent);
     }
 
@@ -825,31 +1534,26 @@
     }
 
     .ps-bar-button {
-        justify-content: center;
         flex-shrink: 0;
-        min-width: 36px;
-        min-height: 32px;
-        padding: 4px 8px;
+        padding: 4px 9px;
     }
 
-    /* Badge: smaller chips so they fit beside each other. */
     .ps-badge {
         gap: 4px;
     }
 
     .ps-badge .ps-chip {
-        font-size: 0.75em;
         padding: 0 7px 0 6px;
+        font-size: 0.75em;
     }
 
-    /* Popups use the full width. */
     .ps-popup {
-        gap: 10px;
+        gap: 12px;
     }
 
     .ps-popup-icon {
-        width: 34px;
-        height: 34px;
+        width: 36px;
+        height: 36px;
         border-radius: 10px;
         font-size: 1em;
     }
@@ -858,443 +1562,53 @@
         font-size: 1.05em;
     }
 
-    .ps-popup-header p {
-        word-break: break-word;
-    }
-
     .ps-add-row .menu_button span {
         display: none;
     }
 
-    /* Timeline: narrower rail, roomier tap targets. */
-    .ps-timeline {
-        padding-left: 28px;
-    }
-
-    .ps-timeline::before {
-        left: 9px;
-    }
-
-    .ps-tl-node {
-        left: -28px;
-        width: 20px;
-        height: 20px;
-        font-size: 0.6em;
-    }
-
-    .ps-tl-card {
-        padding: 10px 11px;
-    }
-
-    .ps-tl-range {
-        flex-basis: 100%;
-        order: 3;
-    }
-
-    .ps-tl-actions .menu_button,
-    .ps-toolbar .menu_button {
-        flex: 1 1 auto;
-        justify-content: center;
-        min-height: 36px;
-    }
-
-    /* Leak warning: buttons get their own full-width row. */
-    .ps-leak-actions {
-        flex-basis: 100%;
-    }
-
-    .ps-leak-actions .menu_button {
-        flex: 1;
-        justify-content: center;
-        min-height: 36px;
-    }
-
-
-    /* Settings */
-    .ps-grid-2 {
-        grid-template-columns: 1fr;
-    }
-
-    .ps-button-row .menu_button {
-        flex: 1 1 auto;
-        justify-content: center;
-    }
-}
-
-/* Touch screens: no hover, so make small targets bigger. */
-@media (pointer: coarse) {
-    .ps-cell {
-        width: 22px;
-        height: 22px;
-    }
-
-    .ps-chip-toggle .ps-chip {
-        padding: 6px 14px 6px 12px;
-    }
-}
-
-.ps-tag-help {
-    margin: 2px 0 0;
-    padding-left: 18px;
-    font-size: 0.85em;
-    color: var(--ps-muted);
-}
-
-.ps-tag-help code {
-    white-space: nowrap;
-}
-
-/* ── Story Memory window ─────────────────────────────────────────── */
-
-.ps-memory {
-    text-align: left;
-}
-
-.ps-tabs {
-    display: flex;
-    gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    border-bottom: 1px solid var(--ps-border);
-}
-
-.ps-tabs::-webkit-scrollbar {
-    display: none;
-}
-
-.ps-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--ps-muted);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: color 0.15s, border-color 0.15s;
-}
-
-.ps-tab:hover {
-    color: var(--ps-text);
-}
-
-.ps-tab.ps-tab-active {
-    color: var(--ps-text);
-    border-bottom-color: var(--ps-accent);
-}
-
-.ps-tab.ps-tab-active i {
-    color: var(--ps-accent);
-}
-
-.ps-tab-count {
-    min-width: 18px;
-    padding: 0 6px;
-    border-radius: 999px;
-    font-size: 0.75em;
-    line-height: 1.6;
-    text-align: center;
-    color: #fff;
-    background: var(--ps-accent-strong);
-}
-
-.ps-tab-body {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-height: 120px;
-}
-
-.ps-clock-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px 14px;
-    font-size: 0.9em;
-}
-
-.ps-clock-row:empty {
-    display: none;
-}
-
-.ps-clock-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.ps-clock-item i {
-    color: var(--ps-accent);
-}
-
-.ps-clock-row .menu_button {
-    margin: 0;
-    padding: 2px 8px;
-}
-
-.ps-card-clock {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 12px;
-    font-size: 0.78em;
-    color: var(--ps-muted);
-}
-
-.ps-section-block {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.ps-section-block h4 {
-    margin: 4px 0 0;
-    font-size: 0.95em;
-}
-
-.ps-section-block h4 i {
-    color: var(--ps-accent);
-}
-
-.ps-notice {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    font-size: 0.9em;
-}
-
-.ps-notice-warn {
-    background: color-mix(in srgb, var(--ps-warn) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--ps-warn) 45%, transparent);
-}
-
-.ps-notice-warn i {
-    color: var(--ps-warn);
-    margin-top: 2px;
-}
-
-/* Status pills added for review and out-of-date entries */
-.ps-status-stale { color: var(--ps-warn); }
-.ps-status-review { color: #60a5fa; }
-
-.ps-tl-item.ps-stale .ps-tl-node {
-    color: var(--ps-warn);
-    border-color: var(--ps-warn);
-}
-
-.ps-tl-item.ps-stale .ps-tl-card {
-    border-color: color-mix(in srgb, var(--ps-warn) 45%, transparent);
-}
-
-.ps-kind-memory.ps-level-1 .ps-tl-card,
-.ps-kind-memory.ps-level-2 .ps-tl-card {
-    border-width: 1px 1px 1px 4px;
-    border-left-color: var(--ps-story);
-}
-
-/* Review drafts */
-.ps-draft {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: color-mix(in srgb, #60a5fa 8%, var(--ps-surface));
-    border: 1px dashed color-mix(in srgb, #60a5fa 55%, transparent);
-}
-
-.ps-draft-extras {
-    margin: 0;
-    padding-left: 18px;
-    font-size: 0.85em;
-    color: var(--ps-muted);
-}
-
-/* Character sheets */
-.ps-sheets {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
-}
-
-.ps-sheet {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: var(--ps-surface);
-    border: 1px solid var(--ps-border);
-}
-
-.ps-sheet-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.ps-sheet-top .ps-chip {
-    font-size: 0.95em;
-}
-
-.ps-sheet-top small,
-.ps-rel-history {
-    color: var(--ps-muted);
-    font-size: 0.78em;
-}
-
-.ps-sheet-state {
-    margin: 0;
-    line-height: 1.5;
-}
-
-.ps-sheet-state.ps-preview,
-.ps-list-done .ps-list-text {
-    color: var(--ps-muted);
-    font-style: italic;
-}
-
-.ps-sheet-rels {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-size: 0.88em;
-}
-
-.ps-sheet-rels li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 8px;
-}
-
-.ps-rel-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.ps-rel-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 10px;
-    padding: 6px 10px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--ps-text) 4%, transparent);
-}
-
-.ps-rel-pair {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.ps-rel-pair i {
-    font-size: 0.75em;
-    color: var(--ps-muted);
-}
-
-.ps-rel-row .ps-rel-history {
-    flex-basis: 100%;
-}
-
-/* Thread and fact lists */
-.ps-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.ps-list-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: var(--ps-surface);
-    border: 1px solid var(--ps-border);
-}
-
-.ps-list-check {
-    flex-shrink: 0;
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-.ps-list-main {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    flex: 1;
-    min-width: 0;
-}
-
-.ps-list-main small {
-    color: var(--ps-muted);
-    font-size: 0.78em;
-}
-
-.ps-list-private {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.85em;
-    color: var(--ps-accent);
-}
-
-.ps-list-actions {
-    display: flex;
-    gap: 4px;
-}
-
-.ps-list-actions .menu_button {
-    margin: 0;
-    padding: 3px 8px;
-}
-
-.ps-link {
-    cursor: pointer;
-    text-decoration: underline dotted;
-}
-
-.ps-resolved summary {
-    cursor: pointer;
-    color: var(--ps-muted);
-    margin-bottom: 6px;
-}
-
-.ps-clock-settings {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.ps-clock-settings span {
-    flex: 1;
-}
-
-.ps-clock-settings .menu_button {
-    margin: 0;
-}
-
-@media (max-width: 600px) {
     .ps-tabs {
         mask-image: linear-gradient(90deg, #000 85%, transparent);
     }
 
     .ps-tab {
-        padding: 8px 10px;
+        padding: 6px 11px;
+    }
+
+    .ps-timeline {
+        padding-left: 30px;
+    }
+
+    .ps-timeline::before {
+        left: 10px;
+    }
+
+    .ps-tl-node {
+        left: -30px;
+        width: 22px;
+        height: 22px;
+        font-size: 0.62em;
+    }
+
+    .ps-tl-card,
+    .ps-draft,
+    .ps-sheet,
+    .ps-kcard {
+        padding: 11px 12px;
+    }
+
+    .ps-tl-range {
+        order: 3;
+        flex-basis: 100%;
+    }
+
+    /* Card and toolbar buttons share the row evenly. */
+    .ps-tl-actions .ps-btn,
+    .ps-toolbar .ps-btn {
+        flex: 1 1 auto;
+    }
+
+    .ps-tl-actions .ps-btn.ps-btn-icon {
+        flex: 0 0 auto;
     }
 
     .ps-sheets {
@@ -1305,16 +1619,92 @@
         flex-wrap: wrap;
     }
 
-    .ps-list-actions .menu_button {
-        min-height: 34px;
-        min-width: 38px;
+    .ps-list-actions {
+        margin-left: auto;
+    }
+
+    .ps-leak-actions {
+        flex-basis: 100%;
+    }
+
+    .ps-leak-actions .ps-btn {
+        flex: 1;
+    }
+
+    .ps-grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    .ps-button-row .menu_button {
+        flex: 1 1 auto;
         justify-content: center;
     }
 }
 
+/* ── 13. Touch screens ───────────────────────────────────────────── */
+
 @media (pointer: coarse) {
-    .ps-list-check {
-        width: 22px;
-        height: 22px;
+    :root {
+        --ps-tap: 42px;
+    }
+
+    .ps-btn.menu_button {
+        padding: 6px 14px;
+        font-size: 0.9em;
+    }
+
+    .ps-btn.ps-btn-icon {
+        padding: 6px 12px;
+    }
+
+    .ps-tab {
+        min-height: 46px;
+    }
+
+    .ps-tl-actions,
+    .ps-toolbar,
+    .ps-kchips,
+    .ps-chip-grid {
+        gap: 8px;
+    }
+
+    /* A 44px tap area around a slightly larger ring. */
+    input[type='checkbox'].ps-list-check {
+        --ps-check-r: 13px;
+        width: 44px;
+        height: 44px;
+        margin: -8px -6px;
+    }
+
+    input[type='checkbox'].ps-list-check::after {
+        width: 7px;
+        height: 12px;
+    }
+
+    .ps-link {
+        min-height: var(--ps-tap);
+        padding: 4px 14px;
+    }
+
+    .ps-cell {
+        width: 24px;
+        height: 24px;
+    }
+
+    .ps-badge-later {
+        padding: 4px;
+    }
+
+    /* 16px text stops iPhones zooming in when an input gets focus. */
+    .ps-popup input.text_pole,
+    .ps-popup textarea,
+    .ps-add-row .text_pole,
+    .private-scenes-settings input.text_pole,
+    .private-scenes-settings textarea {
+        font-size: max(16px, 1em);
+    }
+
+    .private-scenes-settings .checkbox_label {
+        min-height: 36px;
     }
 }

@@ -10,7 +10,7 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 - **Inline tags.** Type `@private Ana, Kael:` in a message instead of clicking.
 - **Story Memory.** One window with tabs for the timeline, character sheets and relationships, open threads, pinned facts, and secrets. It also tracks a story clock (time and place), merges old summaries into chapters, can hold summaries for your review, and notices when edits or deletions make a saved memory out of date.
 
-Tested with SillyTavern 1.19.0 on desktop and on phone-sized screens.
+Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens. Every button is at least 40px tall on touch screens, nothing depends on hovering, and text boxes use 16px text so iPhones don't zoom in.
 
 ## Install
 
