@@ -7,6 +7,8 @@
     --ps-muted: color-mix(in srgb, var(--ps-text) 60%, transparent);
     --ps-surface: color-mix(in srgb, var(--SmartThemeBlurTintColor, #171717) 85%, var(--ps-accent) 6%);
     --ps-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
+    --ps-story: #d4a373;
+    --ps-warn: #f59e0b;
 }
 
 /* ── Character chips ─────────────────────────────────────────────── */
@@ -283,15 +285,15 @@
     position: relative;
     list-style: none;
     margin: 0;
-    padding: 0 0 0 26px;
+    padding: 0 0 0 38px;
 }
 
 .ps-timeline::before {
     content: '';
     position: absolute;
-    left: 8px;
-    top: 10px;
-    bottom: 10px;
+    left: 13px;
+    top: 14px;
+    bottom: 14px;
     width: 2px;
     border-radius: 2px;
     background: linear-gradient(var(--ps-accent), color-mix(in srgb, var(--ps-accent) 15%, transparent));
@@ -304,18 +306,31 @@
 
 .ps-tl-node {
     position: absolute;
-    left: -24px;
-    top: 14px;
-    width: 14px;
-    height: 14px;
+    left: -36px;
+    top: 10px;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
+    font-size: 0.7em;
+    color: var(--ps-accent);
     background: var(--SmartThemeBlurTintColor, #171717);
-    border: 3px solid var(--ps-accent);
+    border: 2px solid var(--ps-accent);
 }
 
 .ps-tl-item.ps-saved .ps-tl-node {
+    color: #fff;
     background: var(--ps-accent);
     box-shadow: 0 0 10px color-mix(in srgb, var(--ps-accent) 70%, transparent);
+}
+
+.ps-kind-memory {
+    --ps-accent: var(--ps-story);
+}
+
+.ps-kind-memory .ps-tl-card {
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #171717) 88%, var(--ps-story) 6%);
 }
 
 .ps-tl-card {
@@ -487,4 +502,228 @@
 #ps_reset {
     align-self: flex-start;
     margin-top: 6px;
+}
+
+/* ── Reveals ─────────────────────────────────────────────────────── */
+
+.ps-chip.ps-chip-revealed {
+    border-style: dashed;
+    background: transparent;
+}
+
+.ps-badge-later {
+    font-size: 0.75em;
+    color: var(--ps-muted);
+}
+
+.ps-tl-learned {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+    color: var(--ps-muted);
+}
+
+/* ── Keywords & toolbar ──────────────────────────────────────────── */
+
+.ps-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.ps-keywords:empty {
+    display: none;
+}
+
+.ps-keyword {
+    padding: 0 8px;
+    border-radius: 6px;
+    font-size: 0.75em;
+    line-height: 1.7;
+    color: var(--ps-muted);
+    background: color-mix(in srgb, var(--ps-text) 8%, transparent);
+}
+
+.ps-keyword::before {
+    content: '# ';
+    opacity: 0.6;
+}
+
+.ps-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ps-toolbar .menu_button {
+    margin: 0;
+}
+
+.ps-toolbar .ps-save-all {
+    background: var(--ps-accent-soft);
+    border-color: var(--ps-accent-line);
+}
+
+.ps-toolbar .ps-save-story {
+    background: color-mix(in srgb, var(--ps-story) 16%, transparent);
+    border-color: color-mix(in srgb, var(--ps-story) 50%, transparent);
+}
+
+/* ── Leak checker ────────────────────────────────────────────────── */
+
+.ps-checking {
+    margin-top: 6px;
+    font-size: 0.8em;
+    color: var(--ps-muted);
+}
+
+.ps-leak {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ps-warn) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ps-warn) 55%, transparent);
+    animation: ps-slide-in 0.25s ease-out;
+}
+
+.ps-leak-icon {
+    font-size: 1.2em;
+    color: var(--ps-warn);
+}
+
+.ps-leak-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 180px;
+    font-size: 0.9em;
+}
+
+.ps-leak-text b {
+    color: var(--ps-warn);
+}
+
+.ps-leak-text small {
+    color: var(--ps-muted);
+}
+
+.ps-leak-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.ps-leak-actions .menu_button {
+    margin: 0;
+    padding: 3px 10px;
+    font-size: 0.85em;
+}
+
+/* ── Who knows what ──────────────────────────────────────────────── */
+
+.ps-grid-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--ps-border);
+    border-radius: 12px;
+}
+
+.ps-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+.ps-grid th,
+.ps-grid td {
+    padding: 8px 10px;
+    text-align: center;
+    border-bottom: 1px solid var(--ps-border);
+}
+
+.ps-grid tr:last-child td {
+    border-bottom: none;
+}
+
+.ps-grid tbody tr:hover {
+    background: var(--ps-accent-soft);
+}
+
+.ps-grid .ps-grid-secret {
+    text-align: left;
+    min-width: 160px;
+    max-width: 260px;
+}
+
+.ps-grid td.ps-grid-secret {
+    display: flex;
+    flex-direction: column;
+}
+
+.ps-grid td.ps-grid-secret small {
+    color: var(--ps-muted);
+}
+
+.ps-cell {
+    --ps-hue: 260;
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.ps-cell-member {
+    background: hsl(var(--ps-hue) 75% 62%);
+    box-shadow: 0 0 8px hsl(var(--ps-hue) 75% 62% / 0.6);
+}
+
+.ps-cell-revealed {
+    border: 2px dashed hsl(var(--ps-hue) 75% 62%);
+    background: hsl(var(--ps-hue) 75% 62% / 0.25);
+}
+
+.ps-cell-unknown {
+    border: 2px solid color-mix(in srgb, var(--ps-text) 18%, transparent);
+}
+
+.ps-cell.ps-clickable {
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.ps-cell.ps-clickable:hover {
+    transform: scale(1.25);
+}
+
+.ps-cell-unknown.ps-clickable:hover {
+    border-color: var(--ps-accent);
+}
+
+.ps-grid-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 0.8em;
+    color: var(--ps-muted);
+}
+
+.ps-grid-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ps-grid-legend .ps-cell {
+    width: 12px;
+    height: 12px;
+}
+
+/* Keep clear of the swipe arrow on the latest message. */
+#chat .last_mes .ps-leak {
+    margin-right: 28px;
 }
