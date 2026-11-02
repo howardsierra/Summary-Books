@@ -153,6 +153,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 | `/memory-save` | Summarizes the public story since the last memory. `at=0-40` sets the range |
 | `/memory` | Opens Story Memory. Add a tab name to open it there: `/memory threads` |
 | `/who-knows` | Opens the Secrets tab |
+| `/private-settings` | Opens the settings as a window |
 | `/memory-merge` | Merges the oldest story entries into a chapter now |
 | `/pin Ana is left-handed` | Pins a fact |
 | `/common kind=news at=12` | Marks message 12 as common knowledge. Kinds: common, news, announcement, rumor |
@@ -161,7 +162,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 
 ## Settings
 
-All of these are under Extensions → Private Scenes.
+All of these are under Extensions → Private Scenes. You can also open them as their own window from the wand menu (**Private Scenes settings**) or with `/private-settings`. On a phone the window fills the screen like an app; on a tablet or computer the settings sit in two columns. Story Memory opens the same way.
 
 At the top is a header card: an on/off switch, live counts for this chat (secrets, story entries, world knowledge, and which model the sidecar uses), and quick buttons for scenes, Story Memory, and Who knows what. Below it, each group of settings folds away and shows its current setup in one line, such as *Leak checker: On · warns you*. The panel remembers which groups you leave open.
 

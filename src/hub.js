@@ -19,7 +19,8 @@ import {
 } from './memory.js';
 import { joinSummary } from './extract.js';
 import {
-    actionButton, avatar, chip, chips, confirm, editSummaryPopup, jumpTo, keywordTags, openReveal, popupHeader, refreshUi, statusPill,
+    actionButton, asWindow, avatar, chip, chips, confirm, editSummaryPopup, jumpTo, keywordTags, openReveal, popupHeader, refreshUi,
+    statusPill, windowCloseButton,
 } from './ui.js';
 
 const TABS = [
@@ -44,11 +45,15 @@ export async function openMemory(startTab = 'timeline') {
     root.classList.add('ps-popup', 'ps-memory');
     const header = popupHeader('fa-book-open', 'Story Memory', 'Everything this story remembers.');
     header.classList.add('ps-banner');
+    header.append(windowCloseButton()[0]);
     $(header).find('.ps-popup-titles').append('<div class="ps-clock-row"></div>');
     root.append(header);
     $(root).append('<div class="ps-tabs" role="tablist"></div><div class="ps-tab-body"></div>');
     refreshMemory();
-    await c.callGenericPopup(root, c.POPUP_TYPE.TEXT, '', { wide: true, large: true, allowVerticalScrolling: true, okButton: 'Close' });
+    await c.callGenericPopup(root, c.POPUP_TYPE.TEXT, '', {
+        wide: true, large: true, allowVerticalScrolling: true, okButton: 'Close',
+        onOpen: (popup) => asWindow(popup, root),
+    });
     root = null;
 }
 

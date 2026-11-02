@@ -18,7 +18,7 @@ import {
     addFact, addThread, clockText, getClock, hasCommonKnowledge, hasPrivateLists, setClock, setVisibility, trackClock,
 } from './src/memory.js';
 import { checkLeak, clearRetries } from './src/leaks.js';
-import { initUi, refreshUi } from './src/ui.js';
+import { initUi, openSettingsWindow, refreshUi } from './src/ui.js';
 import { openMemory } from './src/hub.js';
 
 const PROMPT_KEY = 'private_scenes_rules';
@@ -335,6 +335,15 @@ function registerCommands() {
         unnamedArgumentList: [SlashCommandArgument.fromProps({ description: 'Tab to open', typeList: [ARGUMENT_TYPE.STRING] })],
         callback: (_args, value) => {
             openMemory(String(value ?? '').trim() || 'timeline');
+            return '';
+        },
+    });
+
+    add({
+        name: 'private-settings',
+        helpString: 'Opens the Private Scenes settings in a window.',
+        callback: () => {
+            openSettingsWindow();
             return '';
         },
     });

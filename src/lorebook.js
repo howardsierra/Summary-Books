@@ -17,6 +17,9 @@ const WI_AFTER_CHAR = 1;
 /** Scene ids, memory ids and drafts currently being summarized. */
 export const saving = new Set();
 
+/** A lorebook being created right now, per chat, so simultaneous saves share it. */
+const creatingBook = new Map();
+
 /** The chat-bound lorebook; creates and binds one when missing. */
 export async function getBook(create) {
     const c = ctx();
@@ -24,6 +27,15 @@ export async function getBook(create) {
     if (existing && c.getWorldInfoNames().includes(existing)) return existing;
     if (!create) return null;
     if (!c.chatId) throw new Error('Open a chat first.');
+    // Two saves finishing together (a scene and a thread, say) must not create two lorebooks.
+    if (!creatingBook.has(c.chatId)) {
+        creatingBook.set(c.chatId, createBook().finally(() => creatingBook.delete(c.chatId)));
+    }
+    return creatingBook.get(c.chatId);
+}
+
+async function createBook() {
+    const c = ctx();
 
     const base = `Private Timeline - ${c.chatId}`.replace(/[^a-z0-9 -]/gi, '_').replace(/_{2,}/g, '_').substring(0, 60);
     let name = base;

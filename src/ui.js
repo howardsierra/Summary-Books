@@ -16,7 +16,7 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.7.0';
+const EXTENSION_VERSION = '0.7.1';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 
 // ─── Chips ───────────────────────────────────────────────────────────
@@ -431,11 +431,15 @@ function addWandMenuItems() {
         </div>
         <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_grid" tabindex="0">
             <div class="fa-solid fa-table-cells extensionsMenuExtensionButton"></div><span>Who knows what</span>
+        </div>
+        <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_settings" tabindex="0">
+            <div class="fa-solid fa-sliders extensionsMenuExtensionButton"></div><span>Private Scenes settings</span>
         </div>`);
     $('#extensionsMenu').append(items);
     $('#ps_wand_scene').on('click', onSceneButtonClick);
     $('#ps_wand_timeline').on('click', () => openMemory('timeline'));
     $('#ps_wand_grid').on('click', () => openMemory('secrets'));
+    $('#ps_wand_settings').on('click', openSettingsWindow);
 }
 
 function addSettingsPanel() {
@@ -989,5 +993,63 @@ function addPromptFields() {
             ctx().saveSettingsDebounced();
         });
         container.append(field);
+    }
+}
+
+// ─── Settings window ─────────────────────────────────────────────────
+
+let settingsWindowOpen = false;
+
+/**
+ * Marks a popup as one of our windows: full screen on phones, roomy on
+ * tablets, and with a close button that works like the popup's own.
+ */
+export function asWindow(popup, root) {
+    popup.dlg.classList.add('ps-window-dialog');
+    $(root).find('.ps-window-close').on('click', () => popup.completeAffirmative());
+}
+
+/** A round close button for a window's title bar or banner. */
+export function windowCloseButton() {
+    return $('<div class="ps-window-close" role="button" tabindex="0" title="Close" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></div>')
+        .on('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                $(this).trigger('click');
+            }
+        });
+}
+
+/**
+ * Opens the settings as a window (from the wand menu). The settings are
+ * moved into it, not copied, and moved back to the Extensions panel on close,
+ * so there is only ever one set of controls.
+ */
+export async function openSettingsWindow() {
+    const c = ctx();
+    const drawer = $('.private-scenes-settings .inline-drawer-content');
+    if (!drawer.length || settingsWindowOpen) return;
+    settingsWindowOpen = true;
+
+    const root = $(`
+        <div class="ps-window ps-settings-window private-scenes-settings">
+            <div class="ps-window-bar">
+                <div class="ps-window-title"><i class="fa-solid fa-sliders"></i><b>Settings</b></div>
+            </div>
+            <div class="ps-window-body"></div>
+        </div>`);
+    root.find('.ps-window-bar').append(windowCloseButton());
+    root.find('.ps-window-body').append(drawer.children().detach());
+    refreshSettingsSummary();
+
+    try {
+        await c.callGenericPopup(root[0], c.POPUP_TYPE.TEXT, '', {
+            wide: true, large: true, allowVerticalScrolling: true, okButton: 'Done',
+            onOpen: (popup) => asWindow(popup, root),
+            // Put the controls back before the popup's DOM is removed.
+            onClose: () => drawer.append(root.find('.ps-window-body').children().detach()),
+        });
+    } finally {
+        settingsWindowOpen = false;
     }
 }
