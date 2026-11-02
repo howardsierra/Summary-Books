@@ -19,8 +19,8 @@ import {
 } from './memory.js';
 import { joinSummary } from './extract.js';
 import {
-    actionButton, asWindow, avatar, chip, chips, confirm, editSummaryPopup, jumpTo, keywordTags, openReveal, popupHeader, refreshUi,
-    statusPill, windowCloseButton,
+    actionButton, avatar, chip, chips, confirm, editSummaryPopup, jumpTo, keywordTags, openReveal, popupHeader, refreshUi,
+    showPopup, statusPill, windowCloseButton,
 } from './ui.js';
 
 const TABS = [
@@ -39,7 +39,6 @@ const plural = (n, word, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
 const report = (error) => toastr.error(String(error?.message ?? error), 'Private Scenes');
 
 export async function openMemory(startTab = 'timeline') {
-    const c = ctx();
     tab = TABS.some(([id]) => id === startTab) ? startTab : 'timeline';
     root = document.createElement('div');
     root.classList.add('ps-popup', 'ps-memory');
@@ -50,10 +49,7 @@ export async function openMemory(startTab = 'timeline') {
     root.append(header);
     $(root).append('<div class="ps-tabs" role="tablist"></div><div class="ps-tab-body"></div>');
     refreshMemory();
-    await c.callGenericPopup(root, c.POPUP_TYPE.TEXT, '', {
-        wide: true, large: true, allowVerticalScrolling: true, okButton: 'Close',
-        onOpen: (popup) => asWindow(popup, root),
-    });
+    await showPopup(root, { dialogClass: 'ps-window-dialog', wide: true, large: true, allowVerticalScrolling: true, okButton: 'Close' });
     root = null;
 }
 

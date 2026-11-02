@@ -6,9 +6,9 @@ import {
     formatMembers, getCommon, getFlag, getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames,
     settings, startScene,
 } from './core.js';
-import { refreshSceneEntry } from './lorebook.js';
+import { refreshSceneEntry, saveMemory, saveStorySoFar, staleItems } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
-import { addFact, getClock, setVisibility } from './memory.js';
+import { addFact, getClock, setVisibility, sheetList } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
 import {
     TASKS, currentSource, modelSidecarProblem, providerModels, sidecarProfiles, sourceName, testSidecar,
@@ -16,7 +16,7 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.7.1';
+const EXTENSION_VERSION = '0.8.0';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 
 // ─── Chips ───────────────────────────────────────────────────────────
@@ -238,12 +238,23 @@ export const confirm = async (text) => {
 
 // ─── Flagging & scenes ───────────────────────────────────────────────
 
-async function onMessageButtonClick(event) {
-    const id = Number($(event.currentTarget).closest('.mes').attr('mesid'));
+async function chooseVisibility(id) {
     const message = ctx().chat[id];
     if (!message) return;
     const visibility = await pickVisibility(message);
     if (visibility) await setVisibility([id], visibility);
+}
+
+/** The one Private Scenes button on each message: a small sheet of things to do with it. */
+async function onMessageButtonClick(event) {
+    const mes = $(event.currentTarget).closest('.mes');
+    const id = Number(mes.attr('mesid'));
+    const message = ctx().chat[id];
+    if (!message) return;
+    // Read the selection now; opening the sheet would clear it.
+    const selection = window.getSelection();
+    const selected = selection && mes[0].contains(selection.anchorNode) ? selection.toString().trim() : '';
+    await openMessageSheet(id, selected);
 }
 
 export async function onSceneButtonClick() {
@@ -252,7 +263,9 @@ export async function onSceneButtonClick() {
         title: scene ? 'Edit private scene' : 'Start a private scene',
         subtitle: 'Every new message is private between these characters until you end the scene.',
         current: scene?.members ?? [],
-        hint: 'Tip: type “@scene Ana, Kael:” at the start of a message to do this without clicking.',
+        hint: scene
+            ? 'Deselect everyone to end the scene.'
+            : 'Tip: type “@scene Ana, Kael:” at the start of a message to do this without clicking.',
     });
     if (members !== null) startScene(members);
 }
@@ -301,14 +314,10 @@ export const jumpTo = (id) => ctx().executeSlashCommandsWithOptions(`/chat-jump 
 
 // ─── Pinned facts ────────────────────────────────────────────────────
 
-async function onPinClick(event) {
-    const mes = $(event.currentTarget).closest('.mes');
-    const id = Number(mes.attr('mesid'));
+/** Pins a fact from a message, starting from the text that was selected in it. */
+async function pinFromMessage(id, selected = '') {
     const message = ctx().chat[id];
     if (!message) return;
-    // Start from the selected text when it's inside this message.
-    const selection = window.getSelection();
-    const selected = selection && mes[0].contains(selection.anchorNode) ? selection.toString().trim() : '';
     const members = getMembers(message);
 
     const c = ctx();
@@ -393,15 +402,13 @@ export function refreshUi() {
 // ─── Fixed UI ────────────────────────────────────────────────────────
 
 function addMessageButtons() {
-    const buttons = '<div title="Who knows about this? (everyone, who was there, or only certain characters)" class="mes_button ps_toggle fa-solid fa-user-secret"></div>'
-        + '<div title="Pin a fact from this message" class="mes_button ps_pin fa-solid fa-thumbtack"></div>';
+    const buttons = '<div title="Private Scenes: who knows, pin a fact, summarize up to here" class="mes_button ps_toggle fa-solid fa-user-secret"></div>';
     $('#message_template .extraMesButtons').prepend(buttons);
     // Messages rendered before this extension loaded.
     $('#chat .mes .extraMesButtons').each(function () {
         if (!$(this).find('.ps_toggle').length) $(this).prepend(buttons);
     });
     $(document).on('click', '.ps_toggle', onMessageButtonClick);
-    $(document).on('click', '.ps_pin', onPinClick);
 }
 
 function addSceneBar() {
@@ -422,24 +429,12 @@ function addSceneBar() {
 }
 
 function addWandMenuItems() {
-    const items = $(`
-        <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_scene" tabindex="0">
-            <div class="fa-solid fa-user-secret extensionsMenuExtensionButton"></div><span>Private scene…</span>
-        </div>
-        <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_timeline" tabindex="0">
-            <div class="fa-solid fa-book-open extensionsMenuExtensionButton"></div><span>Story memory</span>
-        </div>
-        <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_grid" tabindex="0">
-            <div class="fa-solid fa-table-cells extensionsMenuExtensionButton"></div><span>Who knows what</span>
-        </div>
-        <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_settings" tabindex="0">
-            <div class="fa-solid fa-sliders extensionsMenuExtensionButton"></div><span>Private Scenes settings</span>
+    const item = $(`
+        <div class="list-group-item flex-container flexGap5 interactable" id="ps_wand_open" tabindex="0">
+            <div class="fa-solid fa-user-secret extensionsMenuExtensionButton"></div><span>Private Scenes</span>
         </div>`);
-    $('#extensionsMenu').append(items);
-    $('#ps_wand_scene').on('click', onSceneButtonClick);
-    $('#ps_wand_timeline').on('click', () => openMemory('timeline'));
-    $('#ps_wand_grid').on('click', () => openMemory('secrets'));
-    $('#ps_wand_settings').on('click', openSettingsWindow);
+    $('#extensionsMenu').append(item);
+    item.on('click', openLauncher);
 }
 
 function addSettingsPanel() {
@@ -1001,12 +996,20 @@ function addPromptFields() {
 let settingsWindowOpen = false;
 
 /**
- * Marks a popup as one of our windows: full screen on phones, roomy on
- * tablets, and with a close button that works like the popup's own.
+ * Shows one of our popups. The Popup is created here rather than through
+ * callGenericPopup so it exists from the first frame: SillyTavern runs onOpen
+ * only after the opening animation, and a quick tap before that was lost.
+ * dialogClass styles it (ps-window-dialog: full screen on phones, roomy on
+ * tablets; ps-sheet-dialog: a bottom sheet on phones), and every
+ * .ps-window-close inside closes it. setup(popup) runs before it is shown.
  */
-export function asWindow(popup, root) {
-    popup.dlg.classList.add('ps-window-dialog');
-    $(root).find('.ps-window-close').on('click', () => popup.completeAffirmative());
+export function showPopup(content, { dialogClass, closeResult = 'affirmative', setup = null, ...options }) {
+    const c = ctx();
+    const popup = new c.Popup(content, c.POPUP_TYPE.TEXT, '', options);
+    if (dialogClass) popup.dlg.classList.add(dialogClass);
+    $(content).find('.ps-window-close').on('click', () => closeResult === 'cancel' ? popup.completeCancelled() : popup.completeAffirmative());
+    setup?.(popup);
+    return popup.show();
 }
 
 /** A round close button for a window's title bar or banner. */
@@ -1026,7 +1029,6 @@ export function windowCloseButton() {
  * so there is only ever one set of controls.
  */
 export async function openSettingsWindow() {
-    const c = ctx();
     const drawer = $('.private-scenes-settings .inline-drawer-content');
     if (!drawer.length || settingsWindowOpen) return;
     settingsWindowOpen = true;
@@ -1043,13 +1045,152 @@ export async function openSettingsWindow() {
     refreshSettingsSummary();
 
     try {
-        await c.callGenericPopup(root[0], c.POPUP_TYPE.TEXT, '', {
+        await showPopup(root[0], {
+            dialogClass: 'ps-window-dialog',
             wide: true, large: true, allowVerticalScrolling: true, okButton: 'Done',
-            onOpen: (popup) => asWindow(popup, root),
             // Put the controls back before the popup's DOM is removed.
             onClose: () => drawer.append(root.find('.ps-window-body').children().detach()),
         });
     } finally {
         settingsWindowOpen = false;
     }
+}
+
+// ─── Sheets: the launcher and the per-message actions ────────────────
+
+/**
+ * A small popup of choices (a bottom sheet on phones). Anything inside with
+ * data-action closes it; the chosen action is returned (null when dismissed).
+ */
+async function openSheet(content, className) {
+    let chosen = null;
+    let popupRef = null;
+    // ps-actionsheet, not ps-sheet: that class belongs to the character sheet cards.
+    const root = $('<div class="ps-popup ps-actionsheet"><div class="ps-sheet-grabber" aria-hidden="true"></div></div>').addClass(className);
+    root.append(content);
+    const choose = (el) => {
+        if ($(el).hasClass('disabled')) return;
+        chosen = $(el).data('action');
+        popupRef?.completeAffirmative();
+    };
+    root.on('click', '[data-action]', function () {
+        choose(this);
+    }).on('keydown', '[data-action]', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            choose(this);
+        }
+    });
+    await showPopup(root[0], {
+        dialogClass: 'ps-sheet-dialog', closeResult: 'cancel',
+        okButton: false, cancelButton: false, allowVerticalScrolling: true, animation: 'fast',
+        setup: (popup) => { popupRef = popup; },
+    });
+    return chosen;
+}
+
+function sheetHeader(icon, title, subtitle) {
+    const header = $(popupHeader(icon, title, subtitle)).addClass('ps-sheet-header');
+    header.append(windowCloseButton());
+    return header;
+}
+
+/** A big square-ish tile for the launcher. */
+function tile(action, icon, title, status, { tone = '', badge = 0, disabled = false } = {}) {
+    const el = $('<div class="ps-tile" role="button" tabindex="0"><span class="ps-tile-icon"><i class="fa-solid"></i></span><b></b><small></small></div>');
+    el.attr('data-action', action).addClass(tone ? `ps-tone-${tone}` : '').toggleClass('disabled', disabled).attr('aria-disabled', String(disabled));
+    el.find('i').addClass(icon);
+    el.find('b').text(title);
+    el.find('small').text(status);
+    if (badge) el.append($('<span class="ps-tile-badge"></span>').text(badge));
+    return el;
+}
+
+/** A full-width row for the message sheet. */
+function actionRow(action, icon, title, status, { tone = '', disabled = false } = {}) {
+    const el = $('<div class="ps-action" role="button" tabindex="0"><span class="ps-tile-icon"><i class="fa-solid"></i></span><span class="ps-action-text"><b></b><small></small></span><i class="fa-solid fa-chevron-right ps-action-go" aria-hidden="true"></i></div>');
+    el.attr('data-action', action).addClass(tone ? `ps-tone-${tone}` : '').toggleClass('disabled', disabled).attr('aria-disabled', String(disabled));
+    el.find('.ps-tile-icon i').addClass(icon);
+    el.find('b').text(title);
+    el.find('small').text(status);
+    return el;
+}
+
+const count = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Everything the extension does, in one place (from the wand menu). */
+export async function openLauncher() {
+    const s = settings();
+    const state = chatState();
+    const scene = getScene();
+    const secrets = findScenes().length;
+    const pending = Math.max(0, ctx().chat.length - state.memoryCursor);
+    const attention = state.drafts.length + staleItems().length;
+    const { time, place } = getClock();
+    const openThreads = state.threads.filter(t => t.status === 'open').length;
+
+    const content = $('<div class="ps-launcher"></div>');
+    content.append(sheetHeader('fa-user-secret', 'Private Scenes', scene
+        ? `Private scene running with ${formatMembers(scene.members)}`
+        : 'Secrets, memory and world knowledge for this chat'));
+
+    const grid = $('<div class="ps-tiles"></div>');
+    grid.append(
+        tile('scene', 'fa-masks-theater', scene ? 'Private scene' : 'Start a private scene',
+            scene ? `With ${formatMembers(scene.members)} · edit or end` : 'Only the characters you pick see it', { tone: scene ? 'live' : '' }),
+        tile('memory', 'fa-book-open', 'Story memory', `${count(state.memories.length, 'entry', 'entries')} · ${count(secrets, 'secret')}`, { badge: attention }),
+        tile('summarize', 'fa-scroll', 'Summarize', pending ? `${count(pending, 'new message')} to save` : 'Up to date', { tone: 'story', disabled: !pending }),
+        tile('secrets', 'fa-table-cells', 'Who knows what', secrets ? count(secrets, 'secret') : 'No secrets yet'),
+        tile('characters', 'fa-users', 'Characters', count(sheetList().length, 'sheet')),
+        tile('threads', 'fa-list-check', 'Threads & facts', `${count(openThreads, 'open thread')} · ${count(state.facts.length + state.world.length, 'fact')}`, { tone: 'world' }),
+        tile('clock', 'fa-clock', 'Story clock', s.clockEnabled ? ([time, place].filter(Boolean).join(' · ') || 'Not set yet') : 'Turned off', { disabled: !s.clockEnabled }),
+        tile('settings', 'fa-sliders', 'Settings', GROUP_SUMMARIES.sidecar(s) === 'Same model as the roleplay' ? 'Sidecar, prompts, everything' : `Sidecar: ${GROUP_SUMMARIES.sidecar(s)}`),
+    );
+    content.append(grid);
+    if (!s.enabled) content.append('<div class="ps-notice ps-notice-warn"><i class="fa-solid fa-power-off"></i><span>Private Scenes is turned off. Turn it on in Settings.</span></div>');
+
+    const actions = {
+        scene: onSceneButtonClick,
+        memory: () => openMemory('timeline'),
+        summarize: () => saveStorySoFar(),
+        secrets: () => openMemory('secrets'),
+        characters: () => openMemory('characters'),
+        threads: () => openMemory('threads'),
+        clock: editClock,
+        settings: openSettingsWindow,
+    };
+    const chosen = await openSheet(content, 'ps-launcher-sheet');
+    if (chosen) await actions[chosen]?.();
+}
+
+/** What a message's visibility is, in words. */
+function visibilityLabel(message) {
+    const common = getCommon(message);
+    if (common) return `${COMMON_KINDS[commonKind(common.kind)].label}: every character knows`;
+    const members = getMembers(message);
+    if (members) return `Private: only ${formatMembers(members)}`;
+    return 'Normal: whoever was there';
+}
+
+/** The per-message sheet: who knows, pin a fact, summarize up to here. */
+async function openMessageSheet(id, selected) {
+    const message = ctx().chat[id];
+    const state = chatState();
+    const from = Math.min(state.memoryCursor, id);
+    const alreadySaved = id < state.memoryCursor;
+    const tone = getCommon(message) ? 'world' : getMembers(message) ? '' : 'ok';
+
+    const content = $('<div class="ps-message-sheet"></div>');
+    content.append(sheetHeader('fa-user-secret', `Message ${id}`, `${message.name}: ${String(message.mes ?? '').replace(/\s+/g, ' ').slice(0, 80)}${String(message.mes ?? '').length > 80 ? '…' : ''}`));
+    content.append(
+        actionRow('visibility', getCommon(message) ? 'fa-earth-americas' : getMembers(message) ? 'fa-user-secret' : 'fa-users', 'Who knows about this?', visibilityLabel(message), { tone }),
+        actionRow('pin', 'fa-thumbtack', 'Pin a fact', selected ? `“${selected.slice(0, 60)}${selected.length > 60 ? '…' : ''}”` : 'Something from this message the story must remember'),
+        actionRow('summarize', 'fa-scroll', 'Summarize the story up to here',
+            alreadySaved ? 'Already in story memory' : `Messages ${from}–${id}, public parts only`, { tone: 'story', disabled: alreadySaved }),
+    );
+
+    const chosen = await openSheet(content, 'ps-message-sheet-dialog');
+    if (chosen === 'visibility') await chooseVisibility(id);
+    if (chosen === 'pin') await pinFromMessage(id, selected);
+    if (chosen === 'summarize') await saveMemory(from, id);
 }

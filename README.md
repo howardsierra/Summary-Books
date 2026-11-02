@@ -14,6 +14,24 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 
 Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens. Every button is at least 40px tall on touch screens, nothing depends on hovering, and text boxes use 16px text so iPhones don't zoom in.
 
+## One place for everything
+
+- **Wand menu → Private Scenes** opens a small launcher. Each tile shows its live status and takes you there:
+  - **Private scene**: start one, or edit or end the one that's running.
+  - **Story memory**
+  - **Summarize**: saves the story so far.
+  - **Who knows what**
+  - **Characters**
+  - **Threads & facts**
+  - **Story clock**
+  - **Settings**
+
+  On a phone it slides up from the bottom of the screen.
+- **On any message**, the 🕵️ button in its `…` menu opens that message's options:
+  - **Who knows about this?** shows its current status: normal, private, or common knowledge.
+  - **Pin a fact** starts from any text you selected in the message.
+  - **Summarize the story up to here.**
+
 ## Install
 
 SillyTavern → **Extensions** → **Install extension** → paste this repository's URL.
@@ -38,7 +56,7 @@ The extension also adds a short rules note telling the model that unlisted chara
 | `@private Ana, Kael:` at the start of your message | Makes this message **and the reply to it** private |
 | `@scene Ana, Kael:` at the start of your message | Starts a private scene. Every message after it is private |
 | `@endscene` at the start of your message | Ends the scene. The rest of that message is public |
-| Wand menu → *Private scene…*, or `/private-scene Ana, Kael` | Starts a scene |
+| The launcher's *Private scene* tile (wand menu → Private Scenes), or `/private-scene Ana, Kael` | Starts a scene |
 | `/private at=12-18 Ana, Kael` | Flags a range of messages after the fact |
 
 While a scene is running, a glowing bar above the chat box shows who's in it, with buttons to edit it, open the timeline, or end it.
@@ -108,7 +126,7 @@ Use **Reveal…** on a timeline card, click an empty dot in the *Who knows what*
 
 ## Who knows what
 
-Open it from the wand menu, the timeline, or `/who-knows`. On a computer, each row is a secret and each column is a character. On a phone, each secret is a card with a chip per character:
+Open it from the launcher (wand menu → Private Scenes → *Who knows what*), the timeline, or `/who-knows`. On a computer, each row is a secret and each column is a character. On a phone, each secret is a card with a chip per character:
 
 - ● **Filled:** the character was there.
 - ◌ **Dashed:** the character found out later. Click to undo.
@@ -116,7 +134,7 @@ Open it from the wand menu, the timeline, or `/who-knows`. On a computer, each r
 
 ## Private Timeline (lorebook)
 
-Open it from the wand menu, the scene bar, or `/private-timeline`. Everything is listed in story order.
+Open it from the launcher (wand menu → Private Scenes), the scene bar, or `/private-timeline`. Everything is listed in story order.
 
 - **Secrets.** When a private scene ends, it's summarized into an entry in the **chat's lorebook**. If the chat has none, one is created and linked automatically. The entry is wrapped in the private labels so the secret stays secret.
 - **Story memory.** *Summarize story so far*, or `/memory-save`, turns the public parts of the story into entries too. Turn on *Automatically summarize the public story* to do this every N public messages, leaving the newest few alone. **Private messages are never put into story memory.**
@@ -127,7 +145,7 @@ Turn on **Hide the original messages after saving** to keep the context small. T
 
 ## Story Memory
 
-Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, or `/memory`. The header shows the **story clock**, and the tabs are:
+Open it from the launcher (wand menu → Private Scenes → *Story memory*), the 📖 button on the scene bar, or `/memory`. The header shows the **story clock**, and the tabs are:
 
 - **Timeline.** Secrets and story entries in story order.
   - **Chapters.** Once there are enough story entries, the oldest ones are merged into a **chapter**. By default that's 5 entries, keeping the newest 3 as they are. Old chapters are merged into an **arc**. This keeps long roleplays small in the prompt. *Split* undoes a merge. Secrets are never merged.
@@ -162,7 +180,7 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 
 ## Settings
 
-All of these are under Extensions → Private Scenes. You can also open them as their own window from the wand menu (**Private Scenes settings**) or with `/private-settings`. On a phone the window fills the screen like an app; on a tablet or computer the settings sit in two columns. Story Memory opens the same way.
+All of these are under Extensions → Private Scenes. You can also open them as their own window from the launcher (wand menu → Private Scenes → **Settings**) or with `/private-settings`. On a phone the window fills the screen like an app; on a tablet or computer the settings sit in two columns. Story Memory opens the same way.
 
 At the top is a header card: an on/off switch, live counts for this chat (secrets, story entries, world knowledge, and which model the sidecar uses), and quick buttons for scenes, Story Memory, and Who knows what. Below it, each group of settings folds away and shows its current setup in one line, such as *Leak checker: On · warns you*. The panel remembers which groups you leave open.
 

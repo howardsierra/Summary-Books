@@ -2655,3 +2655,253 @@ dialog.popup.ps-window-dialog {
         height: 44px;
     }
 }
+
+/* ── 18. Sheets: launcher & message actions ──────────────────────── */
+
+dialog.popup.ps-sheet-dialog {
+    width: min(560px, calc(100dvw - 2em));
+    border-radius: 22px;
+}
+
+.ps-actionsheet {
+    gap: 14px;
+}
+
+.ps-sheet-grabber {
+    display: none;
+}
+
+.ps-sheet-header {
+    align-items: flex-start;
+}
+
+.ps-sheet-header .ps-window-close {
+    margin-left: auto;
+}
+
+.ps-sheet-header .ps-popup-titles {
+    flex: 1;
+}
+
+/* Launcher tiles */
+.ps-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.ps-tile,
+.ps-action {
+    --ps-tone: var(--ps-accent);
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    color: var(--ps-text);
+    border-radius: var(--ps-radius-lg);
+    background:
+        radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--ps-tone) 13%, transparent), transparent 65%),
+        var(--ps-surface);
+    border: 1px solid var(--ps-border);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+    transition: border-color 0.15s, transform 0.12s var(--ps-ease), box-shadow 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.ps-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    min-height: 112px;
+    padding: 14px;
+}
+
+.ps-tile:active,
+.ps-action:active {
+    transform: scale(0.97);
+}
+
+.ps-tile:focus-visible,
+.ps-action:focus-visible {
+    outline: 2px solid var(--ps-tone);
+    outline-offset: 2px;
+}
+
+.ps-tile .ps-tile-icon {
+    margin-bottom: 6px;
+}
+
+.ps-tile-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    color: #fff;
+    background:
+        linear-gradient(160deg, rgb(255 255 255 / 0.25), transparent 50%),
+        var(--ps-tone);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--ps-tone) 40%, transparent);
+}
+
+.ps-tile b {
+    font-size: 0.98em;
+    line-height: 1.25;
+}
+
+.ps-tile small,
+.ps-action small {
+    font-size: 0.8em;
+    line-height: 1.35;
+    color: var(--ps-muted);
+    overflow-wrap: anywhere;
+}
+
+.ps-tile-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: var(--ps-pill);
+    font-size: 0.75em;
+    font-weight: 700;
+    text-align: center;
+    color: #fff;
+    background: var(--ps-warn);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--ps-warn) 60%, transparent);
+}
+
+.ps-tile.disabled,
+.ps-action.disabled {
+    opacity: 0.5;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Tones: each kind of thing keeps its color everywhere. */
+.ps-tone-story { --ps-tone: var(--ps-story); }
+.ps-tone-world { --ps-tone: var(--ps-world); }
+.ps-tone-ok { --ps-tone: var(--ps-ok); }
+
+/* A running private scene glows. */
+.ps-tile.ps-tone-live {
+    border-color: var(--ps-accent-line);
+    box-shadow: 0 0 0 1px var(--ps-accent-line), 0 6px 22px color-mix(in srgb, var(--ps-accent) 25%, transparent);
+}
+
+.ps-tile.ps-tone-live .ps-tile-icon::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: 44px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--ps-ok);
+    box-shadow: 0 0 0 2px var(--ps-surface);
+    animation: ps-pulse 1.8s infinite;
+}
+
+/* Message sheet rows */
+.ps-message-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ps-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 64px;
+    padding: 10px 14px;
+}
+
+.ps-action-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.ps-action-go {
+    flex-shrink: 0;
+    font-size: 0.8em;
+    color: var(--ps-muted);
+}
+
+@media (hover: hover) {
+    .ps-tile:hover,
+    .ps-action:hover {
+        border-color: color-mix(in srgb, var(--ps-tone) 55%, transparent);
+        box-shadow: 0 6px 20px rgb(0 0 0 / 0.22);
+        transform: translateY(-1px);
+    }
+}
+
+/* Wide screens: the launcher is a 4-across grid. */
+@media (min-width: 900px) {
+    dialog.popup.ps-sheet-dialog:has(.ps-launcher) {
+        width: min(760px, calc(100dvw - 2em));
+    }
+
+    .ps-launcher .ps-tiles {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+/* Phones: a bottom sheet that slides up, clear of the home bar. */
+@media (max-width: 600px) {
+    dialog.popup.ps-sheet-dialog {
+        inset: auto 0 0 0;
+        width: 100dvw !important;
+        max-width: 100dvw !important;
+        min-width: 0 !important;
+        max-height: 92dvh !important;
+        margin: 0;
+        padding: 6px 12px calc(env(safe-area-inset-bottom) + 12px);
+        border: none;
+        border-top: 1px solid var(--ps-border);
+        border-radius: 24px 24px 0 0;
+        animation: ps-sheet-up 0.28s var(--ps-ease);
+    }
+
+    .ps-sheet-grabber {
+        display: block;
+        width: 40px;
+        height: 5px;
+        margin: 2px auto 0;
+        border-radius: var(--ps-pill);
+        background: color-mix(in srgb, var(--ps-text) 25%, transparent);
+    }
+
+    .ps-tiles {
+        gap: 8px;
+    }
+
+    .ps-tile {
+        min-height: 92px;
+        padding: 11px 12px;
+    }
+
+    .ps-tile .ps-tile-icon {
+        width: 34px;
+        height: 34px;
+        margin-bottom: 4px;
+    }
+}
+
+@keyframes ps-sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    dialog.popup.ps-sheet-dialog,
+    .ps-tile.ps-tone-live .ps-tile-icon::after {
+        animation: none;
+    }
+}
