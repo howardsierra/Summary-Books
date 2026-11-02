@@ -161,7 +161,9 @@ Open it from the wand menu (*Story memory*), the 📖 button on the scene bar, o
 
 ## Settings
 
-All of these are under Extensions → Private Scenes:
+All of these are under Extensions → Private Scenes.
+
+At the top is a header card: an on/off switch, live counts for this chat (secrets, story entries, world knowledge, and which model the sidecar uses), and quick buttons for scenes, Story Memory, and Who knows what. Below it, each group of settings folds away and shows its current setup in one line, such as *Leak checker: On · warns you*. The panel remembers which groups you leave open.
 
 - **AI sidecar:** same model, a model you pick, or a connection profile for background tasks; which tasks use it; and the fallback.
 - **AI prompts for background tasks:** every task's instructions, each with a reset button.

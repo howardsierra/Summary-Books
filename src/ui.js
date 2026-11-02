@@ -2,8 +2,9 @@
 // warnings, the pin button, the scene bar and the settings panel.
 
 import {
-    COMMON_KINDS, adoptScene, allNames, commonKind, ctx, defaultSettings, endScene, ensureMid, formatMembers, getCommon,
-    getFlag, getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames, settings, startScene,
+    COMMON_KINDS, adoptScene, allNames, chatState, commonKind, ctx, defaultSettings, endScene, ensureMid, findScenes,
+    formatMembers, getCommon, getFlag, getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames,
+    settings, startScene,
 } from './core.js';
 import { refreshSceneEntry } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
@@ -13,6 +14,9 @@ import {
     TASKS, currentSource, modelSidecarProblem, providerModels, sidecarProfiles, sourceName, testSidecar,
 } from './llm.js';
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
+
+/** Shown in the settings header; keep in step with manifest.json. */
+const EXTENSION_VERSION = '0.7.0';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 
 // ─── Chips ───────────────────────────────────────────────────────────
@@ -383,6 +387,7 @@ export function refreshUi() {
     $('#ps_clock_status').text(settings().clockEnabled ? [time || 'time not set', place || 'place not set'].join(' · ') : 'Story clock is off.');
 
     refreshMemory();
+    refreshSettingsSummary();
 }
 
 // ─── Fixed UI ────────────────────────────────────────────────────────
@@ -681,6 +686,161 @@ export function initUi() {
     addSceneBar();
     addWandMenuItems();
     addSettingsPanel();
+    arrangeSettings();
+}
+
+// ─── Settings layout: header card, collapsible groups, live summaries ─
+
+const OPEN_GROUPS_KEY = 'privateScenes.openGroups';
+
+const readOpenGroups = () => {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(OPEN_GROUPS_KEY) ?? '[]'));
+    } catch {
+        return new Set();
+    }
+};
+
+const saveOpenGroups = (open) => {
+    try {
+        localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...open]));
+    } catch { /* private window or storage blocked: groups just start closed */ }
+};
+
+const onOff = (value) => value ? 'On' : 'Off';
+
+/** One-line summaries shown on each closed group, so the setup is readable at a glance. */
+const GROUP_SUMMARIES = {
+    messages: (s) => `Badges ${onOff(s.showBadges).toLowerCase()} · @tags ${onOff(s.inlineTags).toLowerCase()}`,
+    sidecar: (s) => s.sidecarMode === 'model' && s.sidecarModel ? `${s.sidecarModel}${modelSidecarProblem() ? ' · needs attention' : ` via ${sourceName()}`}`
+        : s.sidecarMode === 'profile' && s.sidecarProfile ? `Profile: ${sidecarProfiles()?.find(p => p.id === s.sidecarProfile)?.name ?? 'missing'}`
+            : 'Same model as the roleplay',
+    clock: (s) => {
+        if (!s.clockEnabled) return 'Off';
+        const { time, place } = getClock();
+        return [time, place].filter(Boolean).join(' · ') || 'On · not set yet';
+    },
+    common: (s) => s.worldCondense ? 'Condensed into World knowledge' : 'Message text kept as is',
+    leak: (s) => !s.leakCheck ? 'Off' : s.leakAutoRegenerate ? 'On · regenerates automatically' : 'On · warns you',
+    timeline: (s) => [s.autoSave ? 'Auto-save secrets' : 'Save secrets by hand', s.reviewBeforeSave ? 'review first' : null, s.hideAfterSave ? 'hide originals' : null].filter(Boolean).join(' · '),
+    story: (s) => [s.autoMemory ? `Every ${s.memoryEvery} messages` : 'Summarize by hand', s.consolidate ? `chapters of ${s.consolidateEvery}` : null].filter(Boolean).join(' · '),
+    characters: (s) => `Sheets ${onOff(s.autoSheets).toLowerCase()} · threads ${onOff(s.trackThreads).toLowerCase()}`,
+    prompts: () => 'Instructions for each background task',
+    advanced: () => 'Labels, rules and where they go in the prompt',
+};
+
+/** Wraps a block of settings in a collapsible card with an icon, title and live summary. */
+function makeGroup(id, icon, title, body) {
+    const group = $(`
+        <details class="ps-group">
+            <summary class="ps-group-head">
+                <span class="ps-group-icon"><i class="fa-solid"></i></span>
+                <span class="ps-group-text"><b></b><small class="ps-group-summary"></small></span>
+                <i class="fa-solid fa-chevron-down ps-group-chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="ps-group-body"></div>
+        </details>`);
+    group.attr('data-group', id);
+    group.find('.ps-group-icon i').addClass(icon);
+    group.find('b').text(title);
+    group.find('.ps-group-body').append(body);
+    return group;
+}
+
+/**
+ * Turns the plain settings list into a header card plus collapsible groups.
+ * Elements are moved, not rebuilt, so every control keeps its handlers.
+ */
+function arrangeSettings() {
+    const content = $('.private-scenes-settings .inline-drawer-content');
+    const sections = content.children('.ps-section');
+    const byTitle = (text) => sections.filter((_, el) => $(el).children('.ps-section-title').text().trim().startsWith(text));
+
+    // Header card: master switch, live status, quick actions and this chat's scene.
+    const hero = $(`
+        <div class="ps-hero">
+            <div class="ps-hero-top">
+                <div class="ps-hero-icon"><i class="fa-solid fa-user-secret"></i></div>
+                <div class="ps-hero-title"><b>Private Scenes</b><small></small></div>
+                <div class="ps-hero-switch"></div>
+            </div>
+            <div class="ps-hero-stats"></div>
+            <div class="ps-hero-scene"></div>
+            <div class="ps-hero-actions"></div>
+        </div>`);
+    hero.find('.ps-hero-title small').text(`Secrets, memory and world knowledge · v${EXTENSION_VERSION}`);
+    const enabled = $('#ps_enabled').closest('label');
+    enabled.find('span').text('Enabled');
+    hero.find('.ps-hero-switch').append(enabled);
+    const chat = byTitle('This chat');
+    hero.find('.ps-hero-scene').append($('#ps_scene_status'));
+    hero.find('.ps-hero-actions').append(chat.find('.ps-button-row').children());
+    content.prepend(hero);
+    chat.remove();
+
+    // The untitled first section (badges and tags) becomes a group too.
+    const first = sections.first();
+    first.replaceWith(makeGroup('messages', 'fa-tags', 'Messages & tags', first.children()).wrap('<div class="ps-section"></div>').parent());
+
+    const titled = [
+        ['AI sidecar', 'sidecar'], ['Story clock', 'clock'], ['Common knowledge', 'common'], ['Leak checker', 'leak'],
+        ['Lorebook timeline', 'timeline'], ['Story memory', 'story'], ['Characters', 'characters'],
+    ];
+    for (const [title, id] of titled) {
+        const section = byTitle(title);
+        const heading = section.children('.ps-section-title');
+        const icon = heading.find('i').attr('class')?.replace('fa-solid', '').trim();
+        const label = heading.text().trim();
+        heading.remove();
+        section.append(makeGroup(id, icon, label, section.children().not('.ps-group')));
+    }
+
+    // The two "advanced" sections are <details> already: give them the same look.
+    content.find('details.ps-advanced-section').each(function () {
+        const summary = $(this).children('summary');
+        const icon = summary.find('i').attr('class')?.replace('fa-solid', '').trim();
+        const label = summary.text().trim();
+        const id = label.startsWith('AI prompts') ? 'prompts' : 'advanced';
+        summary.remove();
+        $(this).replaceWith(makeGroup(id, icon, label.replace(' (advanced)', ''), $(this).children()));
+    });
+
+    // Remember which groups are open, per browser.
+    const open = readOpenGroups();
+    content.find('.ps-group').each(function () {
+        const id = $(this).data('group');
+        this.open = open.has(id);
+        $(this).on('toggle', () => {
+            const now = readOpenGroups();
+            if (this.open) now.add(id);
+            else now.delete(id);
+            saveOpenGroups(now);
+        });
+    });
+    content.addClass('ps-arranged');
+    content.on('change input', () => refreshSettingsSummary());
+    refreshSettingsSummary();
+}
+
+/** Updates the header card's status pills and every group's one-line summary. */
+function refreshSettingsSummary() {
+    const s = settings();
+    for (const [id, summarize] of Object.entries(GROUP_SUMMARIES)) {
+        $(`.ps-group[data-group="${id}"] .ps-group-summary`).text(summarize(s));
+    }
+    const state = chatState();
+    const stats = $('.ps-hero-stats').empty();
+    const stat = (icon, text, cls = '') => stats.append($('<span class="ps-hero-stat"><i class="fa-solid"></i><span></span></span>')
+        .addClass(cls).find('i').addClass(icon).end().find('span').text(text).end());
+    if (!s.enabled) {
+        stat('fa-power-off', 'Turned off', 'ps-stat-off');
+        return;
+    }
+    const secrets = findScenes().length;
+    stat('fa-user-secret', `${secrets} secret${secrets === 1 ? '' : 's'}`);
+    stat('fa-scroll', `${state.memories.length} story ${state.memories.length === 1 ? 'entry' : 'entries'}`);
+    stat('fa-earth-americas', `${state.world.length} world`);
+    stat('fa-microchip', GROUP_SUMMARIES.sidecar(s), s.sidecarMode !== 'main' ? 'ps-stat-accent' : '');
 }
 
 // ─── Settings: AI sidecar & prompts ──────────────────────────────────

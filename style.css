@@ -2178,3 +2178,317 @@ input[type='checkbox'].ps-list-check:focus-visible {
         font-size: max(16px, 1em);
     }
 }
+
+/* ── 16. Settings: header card, groups, switches ─────────────────── */
+
+/* No display rule here: SillyTavern opens and closes the drawer by toggling display. */
+.ps-arranged {
+    padding-top: 6px;
+}
+
+.ps-arranged > * + * {
+    margin-top: 8px;
+}
+
+.ps-arranged > .ps-section {
+    padding: 0;
+    border-bottom: none;
+}
+
+/* Header card */
+.ps-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    border-radius: var(--ps-radius-lg);
+    border: 1px solid color-mix(in srgb, var(--ps-accent) 32%, transparent);
+    background:
+        radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--ps-accent) 26%, transparent), transparent 60%),
+        radial-gradient(90% 120% at 100% 0%, color-mix(in srgb, var(--ps-world) 12%, transparent), transparent 60%),
+        var(--ps-surface);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 4px 16px rgb(0 0 0 / 0.18);
+}
+
+.ps-hero-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ps-hero-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    font-size: 1.25em;
+    color: #fff;
+    background:
+        linear-gradient(160deg, rgb(255 255 255 / 0.28), transparent 45%),
+        linear-gradient(135deg, var(--ps-accent), var(--ps-accent-strong));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25), 0 6px 16px color-mix(in srgb, var(--ps-accent) 40%, transparent);
+}
+
+.ps-hero-title {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.ps-hero-title b {
+    font-size: 1.08em;
+}
+
+.ps-hero-title small {
+    color: var(--ps-muted);
+    font-size: 0.8em;
+}
+
+.ps-hero-switch .checkbox_label {
+    gap: 8px;
+    margin: 0;
+    font-size: 0.85em;
+    color: var(--ps-muted);
+}
+
+.ps-hero-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ps-hero-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 3px 10px;
+    border-radius: var(--ps-pill);
+    font-size: 0.8em;
+    background: color-mix(in srgb, var(--ps-base) 55%, transparent);
+    border: 1px solid var(--ps-border);
+}
+
+.ps-hero-stat span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.ps-hero-stat i {
+    color: var(--ps-accent);
+    font-size: 0.9em;
+}
+
+.ps-hero-stat.ps-stat-accent {
+    border-color: var(--ps-accent-line);
+    background: var(--ps-accent-soft);
+}
+
+.ps-hero-stat.ps-stat-off i {
+    color: var(--ps-muted);
+}
+
+.ps-hero-scene:empty {
+    display: none;
+}
+
+.ps-hero-scene #ps_scene_status {
+    font-size: 0.88em;
+    color: var(--ps-muted);
+}
+
+.ps-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ps-hero-actions .menu_button {
+    flex: 1 1 auto;
+    justify-content: center;
+    margin: 0;
+    border-radius: var(--ps-pill);
+}
+
+/* Collapsible groups */
+.ps-group {
+    border-radius: var(--ps-radius);
+    background: var(--ps-surface);
+    border: 1px solid var(--ps-border);
+    transition: border-color 0.15s, box-shadow 0.2s;
+}
+
+.ps-group[open] {
+    border-color: color-mix(in srgb, var(--ps-accent) 35%, transparent);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+}
+
+.ps-group-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 8px 12px;
+    cursor: pointer;
+    list-style: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.ps-group-head::-webkit-details-marker {
+    display: none;
+}
+
+.ps-group-icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    color: var(--ps-accent);
+    background: var(--ps-accent-soft);
+    transition: background 0.2s, color 0.2s;
+}
+
+.ps-group[open] .ps-group-icon {
+    color: #fff;
+    background: linear-gradient(135deg, var(--ps-accent), var(--ps-accent-strong));
+}
+
+.ps-group-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.ps-group-text b {
+    font-size: 0.98em;
+}
+
+.ps-group-summary {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 0.8em;
+    color: var(--ps-muted);
+}
+
+.ps-group-chevron {
+    flex-shrink: 0;
+    font-size: 0.8em;
+    color: var(--ps-muted);
+    transition: transform 0.2s var(--ps-ease);
+}
+
+.ps-group[open] .ps-group-chevron {
+    transform: rotate(180deg);
+}
+
+.ps-group-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 14px 14px;
+    animation: ps-fade-in 0.2s ease-out;
+}
+
+.ps-group-body > .ps-section-title {
+    display: none;
+}
+
+/* Switches instead of checkboxes (beats SillyTavern's input[type='checkbox'] rules). */
+.private-scenes-settings .checkbox_label {
+    align-items: center;
+    gap: 10px;
+}
+
+.private-scenes-settings .checkbox_label input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex-shrink: 0;
+    width: 36px;
+    height: 20px;
+    margin: 0;
+    border: none;
+    border-radius: var(--ps-pill);
+    outline: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ps-text) 22%, transparent);
+    filter: none;
+    transform: none;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--ps-text) 14%, transparent);
+    transition: background 0.2s var(--ps-ease), box-shadow 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.private-scenes-settings .checkbox_label input[type='checkbox']::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    clip-path: none;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+    transform: none;
+    transition: transform 0.2s var(--ps-ease);
+}
+
+.private-scenes-settings .checkbox_label input[type='checkbox']:checked {
+    background: linear-gradient(135deg, var(--ps-accent), var(--ps-accent-strong));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ps-accent) 60%, transparent), 0 0 10px color-mix(in srgb, var(--ps-accent) 35%, transparent);
+}
+
+.private-scenes-settings .checkbox_label input[type='checkbox']:checked::before {
+    transform: translateX(16px);
+}
+
+.private-scenes-settings .checkbox_label input[type='checkbox']:focus-visible {
+    outline: 2px solid var(--ps-accent);
+    outline-offset: 2px;
+}
+
+@media (hover: hover) {
+    .ps-group-head:hover .ps-group-icon {
+        background: color-mix(in srgb, var(--ps-accent) 24%, transparent);
+    }
+
+    .ps-group:not([open]):hover {
+        border-color: color-mix(in srgb, var(--ps-text) 24%, transparent);
+    }
+}
+
+@media (pointer: coarse) {
+    .ps-group-head {
+        min-height: 60px;
+    }
+
+    .private-scenes-settings .checkbox_label {
+        min-height: 44px;
+    }
+
+    .private-scenes-settings .checkbox_label input[type='checkbox'] {
+        width: 46px;
+        height: 28px;
+    }
+
+    .private-scenes-settings .checkbox_label input[type='checkbox']::before {
+        width: 24px;
+        height: 24px;
+    }
+
+    .private-scenes-settings .checkbox_label input[type='checkbox']:checked::before {
+        transform: translateX(18px);
+    }
+}
