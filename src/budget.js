@@ -155,7 +155,8 @@ export function captureChatPrompt(data) {
 
 /** GENERATE_AFTER_COMBINE_PROMPTS (text completion): {prompt, dryRun} */
 export function captureTextPrompt(data) {
-    if (!armed || data?.dryRun || typeof data?.prompt !== 'string') return;
+    // Chat-completion APIs fire this too, before their real prompt is ready.
+    if (!armed || ctx().mainApi === 'openai' || data?.dryRun || typeof data?.prompt !== 'string') return;
     armed = false;
     lastSent = { at: new Date(), messages: [{ role: 'prompt', content: data.prompt }] };
 }
