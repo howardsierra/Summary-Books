@@ -176,6 +176,7 @@ export async function upsertEntry(book, uid, fields) {
     Object.assign(entry, { position: WI_AFTER_CHAR, addMemo: true, disable: false }, fields);
     await c.saveWorldInfo(book, data, true);
     c.reloadWorldInfoEditor(book);
+    hooks.entriesChanged();
     return entry.uid;
 }
 
@@ -187,6 +188,7 @@ export async function deleteEntry(book, uid) {
         delete data.entries[uid];
         await c.saveWorldInfo(book, data, true);
         c.reloadWorldInfoEditor(book);
+        hooks.entriesChanged();
     }
 }
 

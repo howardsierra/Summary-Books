@@ -49,6 +49,8 @@ export const defaultSettings = Object.freeze({
     autoSave: true,
     hideAfterSave: false,
     branchCopy: true,
+    memoryBudget: 2000,
+    budgetWarn: true,
     entryConstant: false,
     entryOrder: 200,
     keywords: true,
@@ -81,6 +83,7 @@ export const hooks = {
     changed: () => { },
     sceneEnded: (_sceneId) => { },
     openMemory: (_tab) => { },
+    entriesChanged: () => { },
 };
 
 let upgraded = false;

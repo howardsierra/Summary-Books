@@ -20,6 +20,7 @@ import {
 import { checkLeak, clearRetries } from './src/leaks.js';
 import { initUi, openSettingsWindow, refreshUi } from './src/ui.js';
 import { openMemory } from './src/hub.js';
+import { armCapture, captureChatPrompt, captureTextPrompt, openBudget, scheduleBudgetCheck } from './src/budget.js';
 
 const PROMPT_KEY = 'private_scenes_rules';
 const CLOCK_KEY = 'private_scenes_clock';
@@ -203,7 +204,7 @@ function onChatChanged() {
     clearPrompts();
     refreshUi();
     // A branch's copied memories are pruned before counting what is out of date.
-    checkBranch().finally(notifyStale);
+    checkBranch().finally(() => { notifyStale(); scheduleBudgetCheck(); });
 }
 
 function onChatEdited() {
@@ -342,6 +343,17 @@ function registerCommands() {
     });
 
     add({
+        name: 'private-prompt',
+        aliases: ['prompt-budget'],
+        helpString: 'Opens Prompt &amp; budget: what Private Scenes adds to the prompt, its token cost, and the last prompt sent. <code>/private-prompt sent</code> opens the last prompt.',
+        unnamedArgumentList: [SlashCommandArgument.fromProps({ description: '"next" or "sent"', typeList: [ARGUMENT_TYPE.STRING] })],
+        callback: (_args, value) => {
+            openBudget(String(value ?? '').trim() === 'sent' ? 'sent' : 'next');
+            return '';
+        },
+    });
+
+    add({
         name: 'private-settings',
         helpString: 'Opens the Private Scenes settings in a window.',
         callback: () => {
@@ -415,6 +427,7 @@ jQuery(() => {
     hooks.changed = refreshUi;
     hooks.sceneEnded = autoSaveScene;
     hooks.openMemory = openMemory;
+    hooks.entriesChanged = scheduleBudgetCheck;
     initUi();
     registerCommands();
 
@@ -424,6 +437,9 @@ jQuery(() => {
         eventTypes.MESSAGE_UPDATED, eventTypes.MESSAGE_EDITED, eventTypes.MESSAGE_DELETED, eventTypes.MESSAGE_SWIPE_DELETED, eventTypes.MORE_MESSAGES_LOADED]) {
         eventSource.on(type, chatChanged);
     }
+    eventSource.on(eventTypes.GENERATION_STARTED, armCapture);
+    eventSource.on(eventTypes.CHAT_COMPLETION_PROMPT_READY, captureChatPrompt);
+    eventSource.on(eventTypes.GENERATE_AFTER_COMBINE_PROMPTS, captureTextPrompt);
     eventSource.on(eventTypes.MESSAGE_SENT, onMessageSent);
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(eventTypes.MESSAGE_SWIPED, onSwiped);

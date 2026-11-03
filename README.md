@@ -10,9 +10,11 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 - **Who knows what.** A grid of every secret and every character.
 - **Private Timeline.** Saves private scenes, and optionally the public story, as summaries in the chat's lorebook, with keywords as triggers.
 - **Inline tags.** Type `@private Ana, Kael:` in a message instead of clicking.
+- **Prompt & budget.** See exactly what the extension adds to the model's prompt and what it costs in tokens. Set a budget for always-included memory, get warned when you go over, and trim with one click.
+- **Branch-safe.** Branches and checkpoints get their own copy of the lorebook, so they never overwrite each other's memories.
 - **Story Memory.** One window with tabs for the timeline, character sheets and relationships, open threads, pinned facts, and secrets. It also tracks a story clock (time and place), merges old summaries into chapters, can hold summaries for your review, and notices when edits or deletions make a saved memory out of date.
 
-Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens. Every button is at least 40px tall on touch screens, nothing depends on hovering, and text boxes use 16px text so iPhones don't zoom in.
+Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens, and stays fast in chats of several thousand messages. Every button is at least 40px tall on touch screens, nothing depends on hovering, and text boxes use 16px text so iPhones don't zoom in.
 
 ## One place for everything
 
@@ -23,7 +25,7 @@ Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens. Ever
   - **Who knows what**
   - **Characters**
   - **Threads & facts**
-  - **Story clock**
+  - **Prompt & budget**: how many tokens of memory every reply carries.
   - **Settings**
 
   On a phone it slides up from the bottom of the screen.
@@ -143,6 +145,21 @@ Open it from the launcher (wand menu → Private Scenes), the scene bar, or `/pr
 
 Turn on **Hide the original messages after saving** to keep the context small. The summaries then stand in for the hidden messages.
 
+**Branches and checkpoints.** SillyTavern copies a chat's settings into a branch or checkpoint, so both would share one lorebook and overwrite each other's entries. Instead, the chat that created the lorebook owns it. When you open a branch or checkpoint, it gets its own copy, and the copy leaves out the secrets, story entries, pins, threads, world knowledge and reveals from after the branch point. You get a short notice when this happens. Character sheets keep their latest state. Turn off *Branches and checkpoints get their own copy of the lorebook* to share one lorebook instead.
+
+## Prompt & budget
+
+Open it from the launcher (wand menu → Private Scenes → **Prompt & budget**) or with `/private-prompt`.
+
+- **Next reply.** Everything this extension adds to the prompt, with token counts in your current tokenizer:
+  - **Always** included: the secret-keeping and common-knowledge rules, the story clock, World knowledge, pinned facts, open threads, plus story and secret entries if *Always include* is on.
+  - **Triggered** entries, with the keys that bring them in, and which ones the latest messages trigger right now.
+  - The labels around private and common messages.
+
+  A meter compares the always-included part with your **memory budget**: 2,000 tokens by default, editable right there or in Settings. When saving pushes you over, you get one warning per chat.
+- **Ways to trim:** make story or secret entries *only when triggered*, merge old story entries into chapters now, or review world knowledge and pins.
+- **Last sent.** The exact prompt from the last reply you generated in this session, message by message. The parts that came from Private Scenes are highlighted, with their token counts. Tick *Only messages with Private Scenes parts* to hide the rest.
+
 ## Story Memory
 
 Open it from the launcher (wand menu → Private Scenes → *Story memory*), the 📖 button on the scene bar, or `/memory`. The header shows the **story clock**, and the tabs are:
@@ -172,8 +189,9 @@ Open it from the launcher (wand menu → Private Scenes → *Story memory*), the
 | `/memory` | Opens Story Memory. Add a tab name to open it there: `/memory threads` |
 | `/who-knows` | Opens the Secrets tab |
 | `/private-settings` | Opens the settings as a window |
+| `/private-prompt` | Opens Prompt & budget. `/private-prompt sent` opens the last prompt sent |
 | `/memory-merge` | Merges the oldest story entries into a chapter now |
-| `/pin Ana is left-handed` | Pins a fact |
+| `/pin Ana is left-handed` | Pins a fact, as of the last message (`at=12` picks one) |
 | `/common kind=news at=12` | Marks message 12 as common knowledge. Kinds: common, news, announcement, rumor |
 | `/thread Kael owes Bob a favor` | Adds an open thread |
 | `/story-time Day 4, dawn` · `/story-place the stables` | Sets the story clock. With no text, returns it |
@@ -188,8 +206,8 @@ At the top is a header card: an on/off switch, live counts for this chat (secret
 - **AI prompts for background tasks:** every task's instructions, each with a reset button.
 - **Common knowledge:** condense marked messages into a short line, or use their text as is.
 - **Leak checker:** on or off, and auto-regenerate.
-- **Lorebook timeline:** auto-save secrets, keywords, hide after saving, always-include secret entries, and the summary instructions.
-- **Story memory:** auto-summarize, every N messages, how many recent messages to leave alone, always-include, the instructions, and chapter merging (entries per chapter, how many to keep detailed, chapter instructions).
+- **Lorebook timeline:** auto-save secrets, keywords, hide after saving, own lorebook for branches, always-include secret entries, and the summary instructions.
+- **Story memory:** auto-summarize, every N messages, how many recent messages to leave alone, always-include, memory budget and its warning, the instructions, and chapter merging (entries per chapter, how many to keep detailed, chapter instructions).
 - **Characters & threads:** keep sheets up to date, and track threads.
 - **Story clock:** on or off, and the optional per-reply check.
 - **Review:** *Let me review summaries before they are saved*.
@@ -200,4 +218,8 @@ At the top is a header card: an on/off switch, live counts for this chat (secret
 - Private messages are **labelled, not removed**. One narrator plays everyone, so it has to remember the secret to write the characters who know it. Capable models handle this well, and the leak checker catches many slips, but nothing is airtight.
 - The leak checker is itself a model call, so it can miss leaks or flag things that aren't leaks. Use *Looks fine* for the false alarms.
 - Other extensions read the raw messages without the labels. Summaries made by the built-in Summarize, Memory Books, or vector storage won't know a message was private.
-- Interceptors don't run during SillyTavern's dry runs (token counting and prompt inspection), so the labels don't show up there.
+- Interceptors don't run during SillyTavern's dry runs (token counting and prompt inspection), so the labels don't show up there. *Prompt & budget → Last sent* shows the real prompt instead.
+
+## Tests
+
+`tests/` holds unit tests and browser tests that drive a real SillyTavern with a fake model. See [tests/README.md](tests/README.md). `tests/run.sh unit` needs nothing installed.

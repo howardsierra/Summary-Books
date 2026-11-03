@@ -16,8 +16,9 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.8.0';
+const EXTENSION_VERSION = '0.9.0';
 import { editClock, openMemory, refreshMemory } from './hub.js';
+import { lastMeasure, openBudget } from './budget.js';
 
 // ─── Chips ───────────────────────────────────────────────────────────
 
@@ -567,6 +568,13 @@ function addSettingsPanel() {
                         </div>
                         <label class="checkbox_label"><input id="ps_memory_constant" type="checkbox"> <span>Always include story entries (otherwise when triggered)</span></label>
                         <small>Private messages are never included in story memory.</small>
+                        <div class="ps-grid-2">
+                            <div>
+                                <label for="ps_memory_budget">Memory budget (tokens always included)</label>
+                                <input id="ps_memory_budget" class="text_pole" type="number" min="0" max="100000" step="100">
+                            </div>
+                            <label class="checkbox_label ps-budget-warn"><input id="ps_budget_warn" type="checkbox"> <span>Warn when over budget</span></label>
+                        </div>
                         <label class="checkbox_label"><input id="ps_consolidate" type="checkbox"> <span>Merge old story entries into chapters (and chapters into arcs)</span></label>
                         <div class="ps-grid-2">
                             <div>
@@ -653,7 +661,7 @@ function addSettingsPanel() {
         '#ps_world_condense': 'worldCondense',
         '#ps_sidecar_fallback': 'sidecarFallback',
     };
-    const numbers = new Set(['rulesDepth', 'memoryEvery', 'memoryKeepRecent', 'consolidateEvery', 'consolidateKeep']);
+    const numbers = new Set(['memoryBudget', 'rulesDepth', 'memoryEvery', 'memoryKeepRecent', 'consolidateEvery', 'consolidateKeep']);
     const fields = {
         '#ps_rules': 'rules',
         '#ps_scene_rules': 'sceneRules',
@@ -661,6 +669,8 @@ function addSettingsPanel() {
         '#ps_label_start': 'labelStart',
         '#ps_label_end': 'labelEnd',
         '#ps_memory_every': 'memoryEvery',
+        '#ps_memory_budget': 'memoryBudget',
+        '#ps_budget_warn': 'budgetWarn',
         '#ps_memory_keep': 'memoryKeepRecent',
         '#ps_consolidate_every': 'consolidateEvery',
         '#ps_consolidate_keep': 'consolidateKeep',
@@ -746,7 +756,7 @@ const GROUP_SUMMARIES = {
     common: (s) => s.worldCondense ? 'Condensed into World knowledge' : 'Message text kept as is',
     leak: (s) => !s.leakCheck ? 'Off' : s.leakAutoRegenerate ? 'On · regenerates automatically' : 'On · warns you',
     timeline: (s) => [s.autoSave ? 'Auto-save secrets' : 'Save secrets by hand', s.reviewBeforeSave ? 'review first' : null, s.hideAfterSave ? 'hide originals' : null].filter(Boolean).join(' · '),
-    story: (s) => [s.autoMemory ? `Every ${s.memoryEvery} messages` : 'Summarize by hand', s.consolidate ? `chapters of ${s.consolidateEvery}` : null].filter(Boolean).join(' · '),
+    story: (s) => [s.autoMemory ? `Every ${s.memoryEvery} messages` : 'Summarize by hand', s.consolidate ? `chapters of ${s.consolidateEvery}` : null, Number(s.memoryBudget) ? `budget ${Number(s.memoryBudget).toLocaleString()}` : null].filter(Boolean).join(' · '),
     characters: (s) => `Sheets ${onOff(s.autoSheets).toLowerCase()} · threads ${onOff(s.trackThreads).toLowerCase()}`,
     prompts: () => 'Instructions for each background task',
     advanced: () => 'Labels, rules and where they go in the prompt',
@@ -1150,7 +1160,6 @@ export async function openLauncher() {
     const secrets = findScenes().length;
     const pending = Math.max(0, ctx().chat.length - state.memoryCursor);
     const attention = state.drafts.length + staleItems().length;
-    const { time, place } = getClock();
     const openThreads = state.threads.filter(t => t.status === 'open').length;
 
     const content = $('<div class="ps-launcher"></div>');
@@ -1167,7 +1176,9 @@ export async function openLauncher() {
         tile('secrets', 'fa-table-cells', 'Who knows what', secrets ? count(secrets, 'secret') : 'No secrets yet'),
         tile('characters', 'fa-users', 'Characters', count(sheetList().length, 'sheet')),
         tile('threads', 'fa-list-check', 'Threads & facts', `${count(openThreads, 'open thread')} · ${count(state.facts.length + state.world.length, 'fact')}`, { tone: 'world' }),
-        tile('clock', 'fa-clock', 'Story clock', s.clockEnabled ? ([time, place].filter(Boolean).join(' · ') || 'Not set yet') : 'Turned off', { disabled: !s.clockEnabled }),
+        tile('budget', 'fa-gauge-high', 'Prompt & budget', lastMeasure && lastMeasure.book === ctx().chatMetadata?.world_info
+            ? `~${lastMeasure.always.toLocaleString()} / ${(Number(s.memoryBudget) || 0).toLocaleString()} tokens always on`
+            : 'What the model gets, in tokens', { tone: lastMeasure && s.memoryBudget && lastMeasure.always > s.memoryBudget ? 'warn' : '' }),
         tile('settings', 'fa-sliders', 'Settings', GROUP_SUMMARIES.sidecar(s) === 'Same model as the roleplay' ? 'Sidecar, prompts, everything' : `Sidecar: ${GROUP_SUMMARIES.sidecar(s)}`),
     );
     content.append(grid);
@@ -1180,7 +1191,7 @@ export async function openLauncher() {
         secrets: () => openMemory('secrets'),
         characters: () => openMemory('characters'),
         threads: () => openMemory('threads'),
-        clock: editClock,
+        budget: () => openBudget(),
         settings: openSettingsWindow,
     };
     const chosen = await openSheet(content, 'ps-launcher-sheet');
