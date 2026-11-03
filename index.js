@@ -8,7 +8,7 @@
 import {
     COMMON_KINDS, ctx, endScene, flagMessages, formatTemplate, getCommon, getFlag, getScene, hooks, inheritSwipeFlag,
     membersKey, parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
-    adoptScene, commonKind,
+    adoptScene, chatChanged, commonKind,
 } from './src/core.js';
 import {
     autoSaveScene, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
@@ -159,6 +159,7 @@ function applyInlineTags(id) {
 
 function onMessageSent(id) {
     applyInlineTags(id);
+    chatChanged(); // the tags were cut from the text
     const message = ctx().chat[id];
     const scene = getScene();
     // A message tagged as common knowledge stays common even during a private scene.
@@ -414,6 +415,11 @@ jQuery(() => {
     registerCommands();
 
     const { eventSource, eventTypes } = ctx();
+    // First, so every handler below sees fresh caches.
+    for (const type of [eventTypes.MESSAGE_SENT, eventTypes.MESSAGE_RECEIVED, eventTypes.MESSAGE_SWIPED, eventTypes.CHAT_CHANGED,
+        eventTypes.MESSAGE_UPDATED, eventTypes.MESSAGE_EDITED, eventTypes.MESSAGE_DELETED, eventTypes.MESSAGE_SWIPE_DELETED, eventTypes.MORE_MESSAGES_LOADED]) {
+        eventSource.on(type, chatChanged);
+    }
     eventSource.on(eventTypes.MESSAGE_SENT, onMessageSent);
     eventSource.on(eventTypes.MESSAGE_RECEIVED, onMessageReceived);
     eventSource.on(eventTypes.MESSAGE_SWIPED, onSwiped);

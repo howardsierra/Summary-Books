@@ -191,6 +191,7 @@ export const getMembers = (message) => getFlag(message)?.members ?? null;
  * every swipe so it belongs to the message slot, not just the visible swipe.
  */
 export function setFlag(message, flag) {
+    chatChanged();
     // Private and common knowledge are opposites: setting one clears the other.
     setOnAllSwipes(message, (extra) => {
         if (flag) {
@@ -222,6 +223,7 @@ export function getCommon(message) {
 
 /** Marks a message as common knowledge (or clears it with null). Clears any private flag. */
 export function setCommon(message, kind) {
+    chatChanged();
     setOnAllSwipes(message, (extra) => {
         if (kind) {
             extra[COMMON] = { kind: commonKind(kind) };
@@ -250,6 +252,7 @@ export function inheritSwipeFlag(message) {
 // ─── Message ids & source tracking ───────────────────────────────────
 
 function setMid(message, mid) {
+    chatChanged();
     message.extra ??= {};
     message.extra[MID] = mid;
     for (const info of Array.isArray(message.swipe_info) ? message.swipe_info : []) {
@@ -289,13 +292,61 @@ export function sourcesOf(ids) {
  */
 export function sourceStatus(record) {
     if (!record?.sources?.length) return { state: 'ok', ids: null };
-    const positions = new Map();
-    ctx().chat.forEach((message, i) => message.extra?.[MID] && positions.set(message.extra[MID], i));
+    const cached = fresh().status.get(record);
+    if (cached && cached.hash === record.hash && cached.sources === record.sources) return cached.result;
+    const positions = midPositions();
     const ids = record.sources.map(mid => positions.get(mid)).filter(i => i !== undefined);
-    if (!ids.length) return { state: 'gone', ids };
-    if (ids.length < record.sources.length) return { state: 'missing', ids, missing: record.sources.length - ids.length };
-    return { state: textHash(ids) === record.hash ? 'ok' : 'edited', ids };
+    const texts = ids.map(id => cache.chat[id]?.mes);
+    // Same messages with the same text as last time: skip rehashing them.
+    const last = lastStatus.get(record);
+    let result;
+    if (last && last.hash === record.hash && last.sources === record.sources && sameItems(last.ids, ids) && sameItems(last.texts, texts)) {
+        result = last.result;
+    } else if (!ids.length) {
+        result = { state: 'gone', ids };
+    } else if (ids.length < record.sources.length) {
+        result = { state: 'missing', ids, missing: record.sources.length - ids.length };
+    } else {
+        result = { state: textHash(ids) === record.hash ? 'ok' : 'edited', ids };
+    }
+    cache.status.set(record, { hash: record.hash, sources: record.sources, result });
+    lastStatus.set(record, { hash: record.hash, sources: record.sources, ids, texts, result });
+    return result;
 }
+
+const lastStatus = new WeakMap();
+const sameItems = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+// ─── Long-chat caches ────────────────────────────────────────────────
+// Scanning a few thousand messages on every event adds up, so message
+// positions, scenes and source checks are computed once per chat version.
+// The version moves on every message event (see index.js) and whenever this
+// extension changes a flag; a different chat array or length also resets it.
+
+let chatVersion = 0;
+/** Marks the chat as changed: the caches below rebuild on next use. */
+export function chatChanged() {
+    chatVersion++;
+}
+const cache = { chat: null, length: -1, version: -1, positions: null, scenes: null, status: new WeakMap() };
+function fresh() {
+    const chat = ctx().chat;
+    if (cache.chat !== chat || cache.length !== chat.length || cache.version !== chatVersion) {
+        Object.assign(cache, { chat, length: chat.length, version: chatVersion, positions: null, scenes: null, status: new WeakMap() });
+    }
+    return cache;
+}
+/** Message id (ps_mid) → current position. */
+export function midPositions() {
+    const c = fresh();
+    if (!c.positions) {
+        c.positions = new Map();
+        c.chat.forEach((message, i) => message.extra?.[MID] && c.positions.set(message.extra[MID], i));
+    }
+    return c.positions;
+}
+/** Current position of a message id, or -1. */
+export const positionOf = (mid) => midPositions().get(mid) ?? -1;
 
 /** Parse "12" or "12-18" into message ids; defaults to the last message. */
 export function parseRange(at) {
@@ -369,7 +420,12 @@ export function endScene() {
  * @returns {{id: string, index: number, members: string[], ids: number[], legacy: boolean}[]}
  */
 export function findScenes() {
-    const chat = ctx().chat;
+    const c = fresh();
+    c.scenes ??= scanScenes(c.chat);
+    return c.scenes.map(scene => ({ ...scene, ids: [...scene.ids] }));
+}
+
+function scanScenes(chat) {
     const scenes = new Map();
     let legacyRun = null;
     for (let i = 0; i < chat.length; i++) {

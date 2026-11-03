@@ -3,7 +3,7 @@
 
 import {
     COMMON_KINDS, MID, adoptScene, allNames, chatState, commonKind, ctx, findScenes, formatMembers, getReveals, membersKey,
-    nameHue, revealedNames, setRevealedNames, settings, sourceStatus,
+    midPositions, nameHue, revealedNames, setRevealedNames, settings, sourceStatus,
 } from './core.js';
 import {
     acceptCurrent, approveDraft, canConsolidate, discardDraft, levelName, maybeConsolidate, orphanScenes,
@@ -564,7 +564,7 @@ function renderWorld(body) {
         body.append(section);
         return;
     }
-    const positions = new Map(ctx().chat.map((m, i) => [m.extra?.[MID], i]));
+    const positions = midPositions();
     const list = $('<ul class="ps-list"></ul>');
     for (const item of world) {
         const li = listItem(item.text, null).addClass('ps-world-item');
@@ -605,7 +605,7 @@ function renderPinned(body) {
         body.append(section);
         return;
     }
-    const positions = new Map(ctx().chat.map((m, i) => [m.extra?.[MID], i]));
+    const positions = midPositions();
     const list = $('<ul class="ps-list"></ul>');
     for (const fact of facts) {
         const li = listItem(fact.text, fact.members);

@@ -349,7 +349,24 @@ function leakBanner(id, leak) {
     return banner;
 }
 
+let refreshQueued = false;
+/**
+ * Redraws badges, banners and status. Calls are batched: several events in
+ * a row (send, render, save…) cause one redraw on the next frame.
+ */
 export function refreshUi() {
+    if (refreshQueued) return;
+    refreshQueued = true;
+    const run = () => {
+        if (!refreshQueued) return;
+        refreshQueued = false;
+        renderUi();
+    };
+    requestAnimationFrame(run);
+    setTimeout(run, 100); // background tabs pause animation frames
+}
+
+function renderUi() {
     const chat = ctx().chat;
     const s = settings();
 
@@ -358,6 +375,11 @@ export function refreshUi() {
         const message = chat[id];
         const members = s.enabled ? getMembers(message) : null;
         const common = s.enabled ? getCommon(message) : null;
+        const leak = s.enabled && !checking.has(id) ? currentLeak(message) : null;
+        // Skip messages whose decorations would come out the same.
+        const signature = JSON.stringify([id, s.enabled, s.showBadges, members, common?.kind, members && revealedNames(getFlag(message).sceneId), checking.has(id), leak?.status, leak?.reason]);
+        if (this.dataset.psSignature === signature && this.querySelector('.mes_text')) return;
+        this.dataset.psSignature = signature;
         $(this).toggleClass('ps-private', !!members);
         $(this).toggleClass('ps-common', !!common).toggleClass('ps-common-rumor', common?.kind === 'rumor');
         $(this).find('.ps-badge, .ps-leak, .ps-checking').remove();
@@ -379,8 +401,8 @@ export function refreshUi() {
         if (!s.enabled) return;
         if (checking.has(id)) {
             $(this).find('.mes_text').after('<div class="ps-checking"><i class="fa-solid fa-spinner fa-spin"></i> Checking for secret leaks…</div>');
-        } else if (currentLeak(message)?.status === 'leak') {
-            $(this).find('.mes_text').after(leakBanner(id, currentLeak(message)));
+        } else if (leak?.status === 'leak') {
+            $(this).find('.mes_text').after(leakBanner(id, leak));
         }
     });
 

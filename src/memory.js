@@ -5,7 +5,7 @@
 
 import {
     COMMON_KINDS, MID, chatState, commonKind, ctx, ensureMid, flagMessages, formatTemplate, getCommon, hashText, hooks,
-    membersKey, newId, parseNames, revealedNames, saveSoon, setCommon, settings,
+    membersKey, newId, parseNames, positionOf, revealedNames, saveSoon, setCommon, settings,
 } from './core.js';
 import { deleteEntry, getBook, upsertEntry } from './lorebook.js';
 import { parseSummary } from './extract.js';
@@ -403,7 +403,6 @@ export const hasPrivateLists = () => chatState().facts.some(x => x.members?.leng
 /** World items being condensed right now (by id). */
 export const condensing = new Set();
 
-const positionOf = (mid) => ctx().chat.findIndex(m => m.extra?.[MID] === mid);
 
 /**
  * How a world item relates to its message now:
