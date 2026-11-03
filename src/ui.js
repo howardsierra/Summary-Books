@@ -548,6 +548,7 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_review" type="checkbox"> <span>Let me review summaries before they are saved</span></label>
                         <label class="checkbox_label"><input id="ps_keywords" type="checkbox"> <span>Ask for keywords (places, objects, events) as extra triggers</span></label>
                         <label class="checkbox_label"><input id="ps_hide_after_save" type="checkbox"> <span>Hide the original messages after saving</span></label>
+                        <label class="checkbox_label"><input id="ps_branch_copy" type="checkbox"> <span>Branches and checkpoints get their own copy of the lorebook</span></label>
                         <label class="checkbox_label"><input id="ps_entry_constant" type="checkbox"> <span>Always include secret entries (otherwise when triggered)</span></label>
                     </div>
 
@@ -639,6 +640,7 @@ function addSettingsPanel() {
         '#ps_auto_save': 'autoSave',
         '#ps_keywords': 'keywords',
         '#ps_hide_after_save': 'hideAfterSave',
+        '#ps_branch_copy': 'branchCopy',
         '#ps_entry_constant': 'entryConstant',
         '#ps_auto_memory': 'autoMemory',
         '#ps_memory_constant': 'memoryConstant',

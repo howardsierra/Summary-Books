@@ -57,10 +57,11 @@ function groupedContent(title, items) {
     return lines.join('\n');
 }
 
-/** Rewrites the facts and threads entries (after a reveal changes who knows). */
-export async function refreshListEntries() {
+/** Rewrites the facts and threads entries (after a reveal changes who knows), and optionally world knowledge. */
+export async function refreshListEntries({ world = false } = {}) {
     if (chatState().entries.facts) await saveList(writeFactsEntry);
     if (chatState().entries.threads) await saveList(writeThreadsEntry);
+    if (world && chatState().entries.world) await saveList(writeWorldEntry);
 }
 
 const report = (error, what) => {

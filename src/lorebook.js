@@ -5,7 +5,7 @@
 import { createWorldInfoEntry } from '../../../../world-info.js';
 import {
     BOOK_KEY, adoptScene, chatState, ctx, findScenes, formatMembers, formatTemplate, getFlag, hooks,
-    newId, parseNames, revealedNames, settings, sourceStatus, sourcesOf,
+    newId, parseNames, positionOf, revealedNames, settings, sourceStatus, sourcesOf,
 } from './core.js';
 import { extrasInstructions, parseSummary } from './extract.js';
 import { applyExtras, getClock, refreshListEntries, updateSheets, visibleThreads } from './memory.js';
@@ -22,6 +22,8 @@ const creatingBook = new Map();
 
 /** The chat-bound lorebook; creates and binds one when missing. */
 export async function getBook(create) {
+    // A branch that was just opened gets its own copy first; don't write into the shared one.
+    if (branching) await branching;
     const c = ctx();
     const existing = c.chatMetadata[BOOK_KEY];
     if (existing && c.getWorldInfoNames().includes(existing)) return existing;
@@ -34,20 +36,133 @@ export async function getBook(create) {
     return creatingBook.get(c.chatId);
 }
 
-async function createBook() {
+/** An unused lorebook name for the current chat. */
+function newBookName() {
     const c = ctx();
-
-    const base = `Private Timeline - ${c.chatId}`.replace(/[^a-z0-9 -]/gi, '_').replace(/_{2,}/g, '_').substring(0, 60);
+    const base = `${BOOK_PREFIX}${c.chatId}`.replace(/[^a-z0-9 -]/gi, '_').replace(/_{2,}/g, '_').substring(0, 60);
     let name = base;
     for (let n = 2; c.getWorldInfoNames().includes(name); n++) name = `${base} ${n}`;
+    return name;
+}
+const BOOK_PREFIX = 'Private Timeline - ';
 
+async function createBook() {
+    const c = ctx();
+    const name = newBookName();
     await c.saveWorldInfo(name, { entries: {} }, true);
     await c.updateWorldInfoList();
     c.chatMetadata[BOOK_KEY] = name;
+    chatState().bookOwner = c.chatId;
     await c.saveMetadata();
     $('.chat_lorebook_button').addClass('world_set');
     toastr.success(`Created lorebook "${name}" and linked it to this chat.`, 'Private Scenes');
     return name;
+}
+
+// ─── Branches & checkpoints ──────────────────────────────────────────
+// SillyTavern copies a chat's metadata into a branch or checkpoint, so both
+// chats would point at one lorebook and each would overwrite the other's
+// entries. The chat that made the lorebook owns it; any other chat that
+// opens with it gets its own copy, minus what happened after the split.
+
+let branching = null;
+
+/** Run when a chat opens. Resolves once this chat has a lorebook of its own. */
+export function checkBranch() {
+    const run = adoptBranch()
+        .catch(error => reportError(error, 'could not copy the lorebook for this branch'))
+        .finally(() => { if (branching === run) branching = null; });
+    branching = run;
+    return run.then(result => result?.lists ? refreshListEntries({ world: true }) : null);
+}
+
+async function adoptBranch() {
+    const c = ctx();
+    const book = c.chatMetadata?.[BOOK_KEY];
+    if (!c.chatId || !book || !c.getWorldInfoNames().includes(book)) return null;
+    const state = chatState();
+    if (!state.bookOwner) {
+        // Lorebooks made before owners were recorded: the first chat to open one claims it.
+        if (book.startsWith(BOOK_PREFIX)) {
+            state.bookOwner = c.chatId;
+            await c.saveMetadata();
+        }
+        return null;
+    }
+    if (state.bookOwner === c.chatId || !settings().branchCopy) return null;
+
+    const data = await c.loadWorldInfo(book);
+    if (!data?.entries) return null;
+    const copy = structuredClone(data);
+    const pruned = pruneFuture(state, copy, book);
+    const name = newBookName();
+    await c.saveWorldInfo(name, copy, true);
+    await c.updateWorldInfoList();
+    repoint(state, book, name);
+    state.bookOwner = c.chatId;
+    c.chatMetadata[BOOK_KEY] = name;
+    await c.saveMetadata();
+    $('.chat_lorebook_button').addClass('world_set');
+    const note = pruned.count ? ` Left out ${pruned.count} saved ${pruned.count === 1 ? 'memory' : 'memories'} from after the branch point.` : '';
+    toastr.success(`This chat is a branch, so it got its own lorebook: "${name}".${note}`, 'Private Scenes', { timeOut: 8000 });
+    hooks.changed();
+    return pruned;
+}
+
+/**
+ * Drops what the branch never reached: memories and secrets whose messages
+ * are all missing, threads opened later (and reopens ones resolved later),
+ * pins, world knowledge and reveals from later messages.
+ */
+function pruneFuture(state, data, book) {
+    const length = ctx().chat.length;
+    let count = 0;
+    let lists = false;
+    const dropEntry = (record) => { if (record.book === book) delete data.entries[record.uid]; };
+
+    state.memories = state.memories.filter(memory => {
+        if (sourceStatus(memory).state !== 'gone') return true;
+        dropEntry(memory);
+        count++;
+        return false;
+    });
+    // "Story so far" picks up where the remaining memories end.
+    if (count) state.memoryCursor = Math.max(0, ...state.memories.map(m => m.to + 1));
+    state.memoryCursor = Math.min(state.memoryCursor ?? 0, length);
+    const live = new Set(findScenes().map(x => x.id));
+    for (const [id, record] of Object.entries(state.timeline)) {
+        if (live.has(id)) continue;
+        dropEntry(record);
+        delete state.timeline[id];
+        count++;
+    }
+    state.drafts = state.drafts.filter(d => d.to === undefined || d.to < length);
+
+    const before = state.threads.length + state.facts.length + state.world.length;
+    state.threads = state.threads.filter(t => !(t.openedAt >= length));
+    for (const thread of state.threads) {
+        if (!(thread.resolvedAt >= length)) continue;
+        Object.assign(thread, { status: 'open', resolvedAt: null });
+        lists = true;
+    }
+    const exists = (mid) => !mid || positionOf(mid) !== -1;
+    state.facts = state.facts.filter(f => exists(f.sourceMid));
+    state.world = state.world.filter(w => exists(w.sourceMid));
+    lists ||= before !== state.threads.length + state.facts.length + state.world.length;
+    for (const [sceneId, reveals] of Object.entries(state.reveals)) {
+        state.reveals[sceneId] = reveals.filter(r => !(r.at >= length));
+    }
+    return { count, lists };
+}
+
+/** Points every saved record at the copied lorebook. */
+function repoint(node, from, to) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(x => repoint(x, from, to));
+    for (const [key, value] of Object.entries(node)) {
+        if (key === 'book' && value === from) node[key] = to;
+        else repoint(value, from, to);
+    }
 }
 
 /** Creates or updates an entry; returns its uid. */

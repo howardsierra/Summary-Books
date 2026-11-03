@@ -8,10 +8,10 @@
 import {
     COMMON_KINDS, ctx, endScene, flagMessages, formatTemplate, getCommon, getFlag, getScene, hooks, inheritSwipeFlag,
     membersKey, parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
-    adoptScene, chatChanged, commonKind,
+    adoptScene, chatChanged, commonKind, ensureMid,
 } from './src/core.js';
 import {
-    autoSaveScene, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
+    autoSaveScene, checkBranch, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
     saveStorySoFar,
 } from './src/lorebook.js';
 import {
@@ -202,7 +202,8 @@ function onChatChanged() {
     clearRetries();
     clearPrompts();
     refreshUi();
-    notifyStale();
+    // A branch's copied memories are pruned before counting what is out of date.
+    checkBranch().finally(notifyStale);
 }
 
 function onChatEdited() {
@@ -370,10 +371,13 @@ function registerCommands() {
 
     add({
         name: 'pin',
-        helpString: 'Pins a fact the model should always remember. Example: <code>/pin Ana is left-handed</code>',
+        helpString: 'Pins a fact the model should always remember, as of the last message (or <code>at=</code>). Example: <code>/pin Ana is left-handed</code>',
+        namedArgumentList: [atArg('The message the fact comes from. Defaults to the last message.')],
         unnamedArgumentList: [namesArg(true, 'The fact')],
-        callback: async (_args, value) => {
-            await addFact(String(value));
+        callback: async (args, value) => {
+            const id = parseRange(args.at).at(-1);
+            const message = ctx().chat[id];
+            await addFact(String(value), null, message ? ensureMid(message) : null);
             return '';
         },
     });

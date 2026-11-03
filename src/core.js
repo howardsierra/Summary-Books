@@ -48,6 +48,7 @@ export const defaultSettings = Object.freeze({
     sceneRules: 'The scene happening right now is PRIVATE between {{members}}. Nobody else is present or can overhear it.',
     autoSave: true,
     hideAfterSave: false,
+    branchCopy: true,
     entryConstant: false,
     entryOrder: 200,
     keywords: true,
