@@ -26,6 +26,12 @@ T> mood|wired
 Bob orders another round and talks about the weather.
 <div class="phone"><p>Kael: you up?</p></div>
 <img data-iig-instruction='{"prompt":"Bob at the bar"}' src="user/images/bob.png">`;
+// Presets may add their own user-role prompts after the chat, so a trigger word
+// counts in any message newer than the last assistant turn.
+function asked(messages, word) {
+  const lastAssistant = messages.map(m => m.role).lastIndexOf('assistant');
+  return messages.some((m, i) => i > lastAssistant && word.test(typeof m.content === 'string' ? m.content : ''));
+}
 function reply(messages) {
   const all = JSON.stringify(messages);
   const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
@@ -50,8 +56,8 @@ function reply(messages) {
   if (/condense a rumor/.test(sys)) return 'People are whispering that Kael gambled away his family estate.';
   if (/You condense a/.test(sys)) return 'The Daily Star reports that Ana was seen leaving the palace at midnight.';
   if (/track the in-story time/.test(sys)) return 'TIME: Day 2, late night\nPLACE: the courtyard';
-  if (/CBREPLY/.test(lastUser)) return CALLBOARD_REPLY;
-  if (/LEAKME/.test(lastUser) && !leakedOnce) { leakedOnce = true; return 'Bob smirks at Ana: "So, how is the royal seal doing?"'; }
+  if (asked(messages, /CBREPLY/)) return CALLBOARD_REPLY;
+  if (asked(messages, /LEAKME/) && !leakedOnce) { leakedOnce = true; return 'Bob smirks at Ana: "So, how is the royal seal doing?"'; }
   return `Mock reply #${n}.`;
 }
 http.createServer((req, res) => {

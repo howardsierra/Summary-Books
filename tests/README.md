@@ -41,6 +41,7 @@ throwaway install.
 | launcher | the wand-menu launcher and the message action sheet |
 | race | simultaneous saves create one lorebook |
 | callboard | CALLBOARD-formatted replies: clock from the tracker card, tidied leak checks, the `window.PrivateScenes` API |
+| with-callboard | Both extensions together with the real CALLBOARD preset and its regex. Install CALLBOARD Suite as `extensions/callboard` and save the preset in `OpenAI Settings` as `CALLBOARD v1.6.5.json`; skipped otherwise |
 
 Environment variables: `ST_URL`, `MOCK_PORT`, `SIDECAR_PORT`, `PS_TEST_OUT`
 (logs and screenshots; default `tests/.out`).
