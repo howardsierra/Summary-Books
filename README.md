@@ -10,6 +10,8 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 - **Who knows what.** A grid of every secret and every character.
 - **Private Timeline.** Saves private scenes, and optionally the public story, as summaries in the chat's lorebook, with keywords as triggers.
 - **Inline tags.** Type `@private Ana, Kael:` in a message instead of clicking.
+- **Private moments inside a message.** Wrap just part of a message in `<private with="Ana, Kael">…</private>`; the rest stays public.
+- **Scenes the model starts and ends.** Presets like CALLBOARD can have the model open and close private scenes itself, with an Undo.
 - **Prompt & budget.** See exactly what the extension adds to the model's prompt and what it costs in tokens. Set a budget for always-included memory, get warned when you go over, and trim with one click.
 - **Branch-safe.** Branches and checkpoints get their own copy of the lorebook, so they never overwrite each other's memories.
 - **Works with CALLBOARD.** Reads the story clock from its tracker card, and turns its panels and HTML into plain text for summaries and leak checks. See [CALLBOARD and other formatted presets](#callboard-and-other-formatted-presets).
@@ -61,6 +63,37 @@ The extension also adds a short rules note telling the model that unlisted chara
 | `@endscene` at the start of your message | Ends the scene. The rest of that message is public |
 | The launcher's *Private scene* tile (wand menu → Private Scenes), or `/private-scene Ana, Kael` | Starts a scene |
 | `/private at=12-18 Ana, Kael` | Flags a range of messages after the fact |
+
+### Private moments inside a message
+
+Sometimes only part of a message is secret: a whisper at a party, a note passed under the table. Wrap just that part:
+
+```
+The party roars. Bob tells a terrible joke.
+
+<private with="Ana, Kael">
+Ana leans close to Kael: "I stole the royal seal."
+</private>
+
+Back inside, the band strikes up a waltz.
+```
+
+- **On screen,** the part is tinted violet and labelled with who's in on it. The tag itself doesn't show.
+- **For the model,** only that part gets the private labels. Everyone else still knows about the joke and the waltz.
+- **It's a secret like any other:** it's saved to the timeline (when auto-save is on), shows up in *Who knows what*, can be revealed, and the leak checker watches for it. Story memory leaves it out of the public story.
+- A tag that's never closed runs to the end of the message. Your saved message keeps the tag, so you can edit it like any text.
+- A message that's private as a whole ignores the tags inside it.
+
+### Scenes the model starts and ends
+
+A preset can ask the model to write a line at the top of a reply:
+
+| Line | What happens |
+|---|---|
+| `SCENE> private\|Ana, Kael` | A private scene starts for Ana and Kael, and this reply is part of it |
+| `SCENE> end` | The running scene ends; this reply is public |
+
+The line is removed from the reply (and never shows, even while the reply streams), and a notice tells you what happened, with **Undo**. [CALLBOARD](https://github.com/howardsierra/callboard)'s 🤫 Private Scenes toggle teaches the model when to do this. Turn it off with **Let the model start and end private scenes** in settings; the lines are still removed.
 
 While a scene is running, a glowing bar above the chat box shows who's in it, with buttons to edit it, open the timeline, or end it.
 

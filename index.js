@@ -8,7 +8,7 @@
 import {
     COMMON_KINDS, ctx, endScene, flagMessages, formatTemplate, getCommon, getFlag, getScene, hooks, inheritSwipeFlag,
     membersKey, parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
-    adoptScene, chatChanged, commonKind, ensureMid, findScenes,
+    adoptScene, chatChanged, commonKind, ensureMid, findScenes, chatState, formatMembers, partId, messageParts,
 } from './src/core.js';
 import {
     autoSaveScene, checkBranch, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
@@ -22,8 +22,9 @@ import { initUi, openSettingsWindow, refreshUi } from './src/ui.js';
 import { openMemory } from './src/hub.js';
 import { armCapture, captureChatPrompt, captureTextPrompt, openBudget, scheduleBudgetCheck } from './src/budget.js';
 import { tidyText } from './src/tidy.js';
+import { dropStrayTags, fromHtml, hideSceneNotes, mapParts, takeSceneNotes, toDisplayMarkers } from './src/parts.js';
 
-const VERSION = '0.10.0';
+const VERSION = '0.11.0';
 
 const PROMPT_KEY = 'private_scenes_rules';
 const CLOCK_KEY = 'private_scenes_clock';
@@ -95,6 +96,18 @@ globalThis.privateScenesInterceptor = async function (chat, _contextSize, _abort
         chat[i] = { ...chat[i], mes };
     }
 
+    // Private parts inside public messages: labels around just that stretch.
+    for (let i = 0; i < chat.length; i++) {
+        const message = chat[i];
+        if (getFlag(message) || !/<\/?private\b/i.test(message?.mes ?? '')) continue;
+        const mes = mapParts(message.mes, (part) => {
+            anyPrivate = true;
+            const revealed = revealedNames(partId(message, part.index));
+            return `\n${formatTemplate(s.labelStart, part.members, revealed)}\n${part.body}\n${formatTemplate(s.labelEnd, part.members, revealed)}\n`;
+        });
+        chat[i] = { ...message, mes: dropStrayTags(mes).replace(/\n{3,}/g, '\n\n') };
+    }
+
     const parts = [];
     if (anyPrivate || scene || hasSavedScenes() || hasPrivateLists()) parts.push(s.rules);
     if (anyCommon || hasCommonKnowledge()) parts.push(s.commonRules);
@@ -161,6 +174,70 @@ function applyInlineTags(id) {
 
 // ─── Events ──────────────────────────────────────────────────────────
 
+// ─── Private parts and scene notes ───────────────────────────────────
+
+/** Gives messages with private parts a stable id, so each part keeps its secret's id. */
+function stampParts(ids) {
+    const chat = ctx().chat;
+    for (const id of ids ?? chat.keys()) {
+        if (/<private\b/i.test(chat[id]?.mes ?? '') && messageParts(chat[id]).length) ensureMid(chat[id]);
+    }
+}
+
+/** New private parts in a message go to the lorebook like an ended scene would. */
+function autoSaveParts(id) {
+    const message = ctx().chat[id];
+    if (!message || !messageParts(message).length) return;
+    const saved = chatState().timeline;
+    for (const scene of findScenes()) {
+        if (scene.part && scene.ids[0] === id && !saved[scene.id]) autoSaveScene(scene.id);
+    }
+}
+
+const undoToast = (text, undo) => toastr.info(`${text} Tap to undo.`, 'Private Scenes', {
+    timeOut: 12000,
+    onclick: () => {
+        undo();
+        chatChanged();
+        saveSoon();
+        ctx().saveMetadataDebounced();
+        refreshUi();
+        toastr.info('Undone.', 'Private Scenes');
+    },
+});
+
+/**
+ * "SCENE> private|Ana, Kael" / "SCENE> end" lines a preset asks the model to
+ * write: taken out of the reply, and (when allowed) acted on. Runs before the
+ * reply is flagged, so a reply that starts a scene belongs to it.
+ */
+function applySceneNotes(id, message) {
+    const { notes, text } = takeSceneNotes(message.mes);
+    if (!notes.length) return;
+    if (Array.isArray(message.swipes) && message.swipes[message.swipe_id] === message.mes) message.swipes[message.swipe_id] = text;
+    message.mes = text;
+    chatChanged();
+    if (!settings().aiScenes) return;
+
+    const before = getScene();
+    const note = notes.at(-1);
+    if (note.kind === 'end') {
+        if (!before) return;
+        endScene();
+        undoToast(`🤫 Private scene ended: ${formatMembers(before.members)}.`, () => {
+            chatState().scene = before;
+            setFlag(message, { members: before.members, sceneId: before.sceneId });
+        });
+        return;
+    }
+    if (before && membersKey(before.members) === membersKey(note.members)) return;
+    startScene(note.members);
+    undoToast(`🤫 Private scene started: ${formatMembers(note.members)}.`, () => {
+        chatState().scene = before;
+        setFlag(message, before ? { members: before.members, sceneId: before.sceneId } : null);
+    });
+}
+
 function onMessageSent(id) {
     applyInlineTags(id);
     chatChanged(); // the tags were cut from the text
@@ -168,13 +245,17 @@ function onMessageSent(id) {
     const scene = getScene();
     // A message tagged as common knowledge stays common even during a private scene.
     if (message && scene && !getCommon(message)) setFlag(message, { members: scene.members, sceneId: scene.sceneId });
+    stampParts([id]);
     saveSoon();
     refreshUi();
+    autoSaveParts(id);
 }
 
 async function onMessageReceived(id, type) {
     const message = ctx().chat[id];
     if (!message || message.is_system || type === 'first_message') return;
+    if (!message.is_user && type !== 'impersonate') applySceneNotes(id, message);
+    stampParts([id]);
 
     const scene = getScene();
     if (scene) {
@@ -188,6 +269,7 @@ async function onMessageReceived(id, type) {
     saveSoon();
     refreshUi();
 
+    autoSaveParts(id);
     if (!message.is_user && type !== 'impersonate') {
         await checkLeak(id);
         await trackClock(id);
@@ -202,6 +284,7 @@ function onSwiped(id) {
 }
 
 function onChatChanged() {
+    stampParts();
     pendingReply = null;
     clearRetries();
     clearPrompts();
@@ -210,7 +293,8 @@ function onChatChanged() {
     checkBranch().finally(() => { notifyStale(); scheduleBudgetCheck(); });
 }
 
-function onChatEdited() {
+function onChatEdited(id) {
+    if (Number.isInteger(Number(id))) stampParts([Number(id)]);
     refreshUi();
     notifyStale();
 }
@@ -462,6 +546,15 @@ jQuery(() => {
     initUi();
     registerCommands();
     exposeApi();
+
+    // On screen: scene notes hidden (even while a reply streams), private parts tinted.
+    const formatter = ctx().messageFormatter;
+    if (formatter?.addHook) {
+        const on = () => settings().enabled;
+        formatter.addHook((mes) => on() ? hideSceneNotes(mes) : mes, { stage: formatter.stage.BEFORE_REGEX });
+        formatter.addHook((mes) => on() ? toDisplayMarkers(mes) : mes, { stage: formatter.stage.AFTER_REGEX });
+        formatter.addHook((mes) => fromHtml(mes), { stage: formatter.stage.AFTER_MARKDOWN });
+    }
 
     const { eventSource, eventTypes } = ctx();
     // First, so every handler below sees fresh caches.

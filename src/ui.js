@@ -473,6 +473,8 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_enabled" type="checkbox"> <span>Enabled</span></label>
                         <label class="checkbox_label"><input id="ps_show_badges" type="checkbox"> <span>Show the “Private” badge on messages</span></label>
                         <label class="checkbox_label"><input id="ps_inline_tags" type="checkbox"> <span>Inline tags in your messages</span></label>
+                        <label class="checkbox_label"><input id="ps_ai_scenes" type="checkbox"> <span>Let the model start and end private scenes</span></label>
+                        <small>When a preset (like CALLBOARD) has the model write <code>SCENE&gt; private|Ana, Kael</code> or <code>SCENE&gt; end</code>, the scene starts or ends, with an Undo. Short private moments inside a message, <code>&lt;private with="Ana, Kael"&gt;…&lt;/private&gt;</code>, always work.</small>
                         <ul class="ps-tag-help">
                             <li><code>@private Ana, Kael:</code> this message and the reply</li>
                             <li><code>@scene Ana, Kael:</code> start a private scene</li>
@@ -646,6 +648,7 @@ function addSettingsPanel() {
         '#ps_enabled': 'enabled',
         '#ps_show_badges': 'showBadges',
         '#ps_inline_tags': 'inlineTags',
+        '#ps_ai_scenes': 'aiScenes',
         '#ps_leak_check': 'leakCheck',
         '#ps_leak_regen': 'leakAutoRegenerate',
         '#ps_auto_save': 'autoSave',
@@ -749,7 +752,7 @@ const onOff = (value) => value ? 'On' : 'Off';
 
 /** One-line summaries shown on each closed group, so the setup is readable at a glance. */
 const GROUP_SUMMARIES = {
-    messages: (s) => `Badges ${onOff(s.showBadges).toLowerCase()} · @tags ${onOff(s.inlineTags).toLowerCase()}`,
+    messages: (s) => `Badges ${onOff(s.showBadges).toLowerCase()} · @tags ${onOff(s.inlineTags).toLowerCase()} · AI scenes ${onOff(s.aiScenes).toLowerCase()}`,
     sidecar: (s) => s.sidecarMode === 'model' && s.sidecarModel ? `${s.sidecarModel}${modelSidecarProblem() ? ' · needs attention' : ` via ${sourceName()}`}`
         : s.sidecarMode === 'profile' && s.sidecarProfile ? `Profile: ${sidecarProfiles()?.find(p => p.id === s.sidecarProfile)?.name ?? 'missing'}`
             : 'Same model as the roleplay',

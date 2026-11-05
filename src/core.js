@@ -6,6 +6,7 @@
 
 import { PROMPTS, upgradePrompts } from './prompts.js';
 import { tidyText } from './tidy.js';
+import { parseParts, withoutParts } from './parts.js';
 
 export const MODULE = 'privateScenes';
 export const FLAG = 'private_scene';
@@ -79,6 +80,8 @@ export const defaultSettings = Object.freeze({
     clockFromTracker: true,
     // Background tasks get plain text: panels, HTML, images and hidden notes tidied away.
     tidyText: true,
+    // Presets like CALLBOARD may have the model start and end scenes with SCENE> lines.
+    aiScenes: true,
 });
 
 export const ctx = () => SillyTavern.getContext();
@@ -111,7 +114,21 @@ export function settings() {
 }
 
 /** A message's text as background tasks see it. */
-export const storyText = (message) => settings().tidyText ? tidyText(message?.mes) : String(message?.mes ?? '');
+export function storyText(message) {
+    // Private parts are their own secrets: never part of the message as others know it.
+    const text = withoutParts(message?.mes);
+    return settings().tidyText ? tidyText(text) : text;
+}
+
+/** Text of a secret for summaries and leak checks: its messages, or just its part of one. */
+export function sceneTranscript(scene, separator = '\n\n') {
+    const chat = ctx().chat;
+    if (scene.part) {
+        const body = scene.part.body;
+        return `${chat[scene.ids[0]]?.name ?? ''}: ${settings().tidyText ? tidyText(body) : body}`;
+    }
+    return scene.ids.map(id => `${chat[id].name}: ${storyText(chat[id])}`).join(separator);
+}
 
 export function chatState() {
     const meta = ctx().chatMetadata;
@@ -429,12 +446,23 @@ export function endScene() {
 /**
  * Groups flagged messages into scenes, oldest first. Flags from version 0.1
  * have no sceneId; consecutive ones with the same members form one scene.
- * @returns {{id: string, index: number, members: string[], ids: number[], legacy: boolean}[]}
+ * Private parts (<private with="…"> inside a public message) are scenes of
+ * their own, with `part` set: { index, body }.
+ * @returns {{id: string, index: number, members: string[], ids: number[], legacy: boolean, part?: {index: number, body: string}}[]}
  */
 export function findScenes() {
     const c = fresh();
     c.scenes ??= scanScenes(c.chat);
     return c.scenes.map(scene => ({ ...scene, ids: [...scene.ids] }));
+}
+
+/** Stable id of a private part: its message id plus its position in the message. */
+export const partId = (message, index) => `pp_${message?.extra?.[MID] ?? 'x'}_${index}`;
+
+/** Private parts in a message that isn't private as a whole (whole-message flags win). */
+export function messageParts(message) {
+    if (!message || message.is_system || getFlag(message)) return [];
+    return parseParts(message.mes);
 }
 
 function scanScenes(chat) {
@@ -457,7 +485,16 @@ function scanScenes(chat) {
         if (!scenes.has(id)) scenes.set(id, { id, members: flag.members, ids: [], legacy: !flag.sceneId });
         scenes.get(id).ids.push(i);
     }
-    return [...scenes.values()].map((scene, i) => ({ ...scene, index: i + 1 }));
+    const parts = [];
+    chat.forEach((message, i) => {
+        if (!message?.mes?.includes?.('<') || !/<private\b/i.test(message.mes)) return;
+        for (const part of messageParts(message)) {
+            parts.push({ id: partId(message, part.index), members: part.members, ids: [i], legacy: false, part: { index: part.index, body: part.body } });
+        }
+    });
+    return [...scenes.values(), ...parts]
+        .sort((a, b) => a.ids[0] - b.ids[0] || (a.part?.index ?? -1) - (b.part?.index ?? -1))
+        .map((scene, i) => ({ ...scene, index: i + 1 }));
 }
 
 /** The scene containing a message id, or the latest scene. */

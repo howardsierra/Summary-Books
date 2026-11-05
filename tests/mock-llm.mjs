@@ -57,6 +57,9 @@ function reply(messages) {
   if (/You condense a/.test(sys)) return 'The Daily Star reports that Ana was seen leaving the palace at midnight.';
   if (/track the in-story time/.test(sys)) return 'TIME: Day 2, late night\nPLACE: the courtyard';
   if (asked(messages, /CBREPLY/)) return CALLBOARD_REPLY;
+  if (asked(messages, /PARTREPLY/)) return 'The party roars. Bob tells a terrible joke.\n\n<private with="Ana, Kael">\nAna leans close to Kael: "I stole the royal seal."\n</private>\n\nBack inside, the band strikes up a waltz.';
+  if (asked(messages, /SCENESTART/)) return 'SCENE> private|Ana, Kael\nThe study door clicks shut behind them.';
+  if (asked(messages, /SCENEEND/)) return 'SCENE> end\nThey slip back into the ballroom.';
   if (asked(messages, /LEAKME/) && !leakedOnce) { leakedOnce = true; return 'Bob smirks at Ana: "So, how is the royal seal doing?"'; }
   return `Mock reply #${n}.`;
 }

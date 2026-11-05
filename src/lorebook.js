@@ -5,7 +5,7 @@
 import { createWorldInfoEntry } from '../../../../world-info.js';
 import {
     BOOK_KEY, adoptScene, chatState, ctx, findScenes, formatMembers, formatTemplate, getFlag, hooks,
-    newId, parseNames, positionOf, revealedNames, settings, sourceStatus, sourcesOf, storyText,
+    newId, parseNames, positionOf, revealedNames, sceneTranscript, settings, sourceStatus, sourcesOf, storyText,
 } from './core.js';
 import { extrasInstructions, parseSummary } from './extract.js';
 import { applyExtras, getClock, refreshListEntries, updateSheets, visibleThreads } from './memory.js';
@@ -306,7 +306,7 @@ export async function writeSceneEntry(scene, summary, keywords = [], meta = {}) 
     const book = await getBook(true);
     const uid = await upsertEntry(book, record?.book === book ? record.uid : null, {
         // No scene number: numbers shift when an earlier message gets flagged later.
-        comment: `🕵️ Private — ${formatMembers(scene.members)} (msgs ${scene.ids[0]}–${scene.ids.at(-1)})`,
+        comment: `🕵️ Private — ${formatMembers(scene.members)} (${scene.part ? `part of msg ${scene.ids[0]}` : `msgs ${scene.ids[0]}–${scene.ids.at(-1)}`})`,
         content: `${formatTemplate(s.labelStart, scene.members, revealed)}\n${summary}\n${formatTemplate(s.labelEnd, scene.members, revealed)}`,
         key: parseNames([...scene.members, ...revealed, ...keywords]),
         constant: !!s.entryConstant,
@@ -340,7 +340,8 @@ export async function refreshSceneEntry(sceneId) {
 async function commitScene(scene, parsed, threadIds) {
     await writeSceneEntry(scene, parsed.summary, parsed.keywords, { ...sourcesOf(scene.ids), clock: clockAfter(parsed) });
     await applyExtras(parsed, { threadIds, members: scene.members, sceneId: scene.id, at: scene.ids.at(-1) });
-    if (settings().hideAfterSave) await hideMessages(scene.ids);
+    // A private part shares its message with public text, so its message stays visible.
+    if (settings().hideAfterSave && !scene.part) await hideMessages(scene.ids);
 }
 
 async function commitSceneDraft(draft) {
@@ -355,7 +356,7 @@ export async function saveScene(scene, { quiet = false } = {}) {
     saving.add(scene.id);
     hooks.changed();
     try {
-        const { parsed, threadIds } = await summarize(formatTemplate(settings().summaryPrompt, scene.members), transcript(scene.ids),
+        const { parsed, threadIds } = await summarize(formatTemplate(settings().summaryPrompt, scene.members), sceneTranscript(scene),
             { threadMembers: scene.members });
         if (reviewing()) {
             queueDraft({ kind: 'scene', targetId: scene.id, parsed, threadIds, members: [...scene.members], from: scene.ids[0], to: scene.ids.at(-1) });

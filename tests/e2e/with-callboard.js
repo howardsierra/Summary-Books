@@ -67,6 +67,19 @@ L.suite('with-callboard', async (page) => {
     await L.send(page, 'Ana checks the time.');
     prompt = JSON.stringify(L.chatPrompt());
     check('next prompt carries the story clock', /\[Story time: Day 3, 9:47 PM\. Location: the rooftop bar\.\]/.test(prompt));
+    section('scene notes and private parts under CALLBOARD');
+    check('preset teaches scene notes and parts', /SCENE> private\|Name, Name/.test(prompt) && /<private with=/.test(prompt));
+    await L.send(page, 'PARTREPLY The ball goes on.');
+    const part = await page.evaluate(() => {
+        const box = document.querySelector('#chat .mes:last-child .mes_text');
+        return { who: box.querySelector('[data-ps-part]')?.dataset.psPart, text: box.innerText };
+    });
+    check('part tinted, tag hidden, regex untouched', part.who === 'Ana, Kael' && !/<private/.test(part.text) && /waltz/.test(part.text), part);
+    await L.send(page, 'SCENESTART Ana pulls Kael into the study.');
+    eq('model-started scene', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene?.members ?? null), ['Ana', 'Kael']);
+    check('no SCENE> line on screen', !/SCENE>/.test(await page.evaluate(() => document.querySelector('#chat .mes:last-child .mes_text').innerText)));
+    await L.send(page, 'SCENEEND The music swells.');
+    eq('model-ended scene', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene), null);
     await L.shot(page, 'with-callboard');
 
     // Put the previous preset back, so later suites run on SillyTavern's own prompt.

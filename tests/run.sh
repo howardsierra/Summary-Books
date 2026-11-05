@@ -18,7 +18,7 @@ export PS_TEST_OUT="$OUT"
 mkdir -p "$OUT"
 export NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost"
 
-ALL_SUITES=(core memory world callboard with-callboard sidecar-profile sidecar-model branches budget touch windows launcher race)
+ALL_SUITES=(core memory world parts callboard with-callboard sidecar-profile sidecar-model branches budget touch windows launcher race)
 status=0
 
 echo "━━ unit tests"
