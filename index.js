@@ -8,7 +8,7 @@
 import {
     COMMON_KINDS, ctx, endScene, flagMessages, formatTemplate, getCommon, getFlag, getScene, hooks, inheritSwipeFlag,
     membersKey, parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
-    adoptScene, chatChanged, commonKind, ensureMid,
+    adoptScene, chatChanged, commonKind, ensureMid, findScenes,
 } from './src/core.js';
 import {
     autoSaveScene, checkBranch, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
@@ -21,6 +21,9 @@ import { checkLeak, clearRetries } from './src/leaks.js';
 import { initUi, openSettingsWindow, refreshUi } from './src/ui.js';
 import { openMemory } from './src/hub.js';
 import { armCapture, captureChatPrompt, captureTextPrompt, openBudget, scheduleBudgetCheck } from './src/budget.js';
+import { tidyText } from './src/tidy.js';
+
+const VERSION = '0.10.0';
 
 const PROMPT_KEY = 'private_scenes_rules';
 const CLOCK_KEY = 'private_scenes_clock';
@@ -420,6 +423,34 @@ function registerCommands() {
     }
 }
 
+// ─── API for other extensions (CALLBOARD Suite reads it) ────────────
+
+function exposeApi() {
+    try {
+        globalThis.PrivateScenes = Object.freeze({
+            version: VERSION,
+            /** What's going on in this chat right now. */
+            status: () => {
+                const scene = getScene();
+                return {
+                    enabled: settings().enabled,
+                    scene: scene ? { members: [...scene.members] } : null,
+                    secrets: findScenes().length,
+                    clock: { time: getClock().time, place: getClock().place },
+                };
+            },
+            /** Who a message is private to, or null. */
+            privateTo: (id) => getFlag(ctx().chat[Number(id)])?.members?.slice() ?? null,
+            /** The common-knowledge kind of a message (news, rumor…), or null. */
+            commonKind: (id) => getCommon(ctx().chat[Number(id)])?.kind ?? null,
+            /** Opens Story Memory: timeline, characters, threads, facts or secrets. */
+            openMemory: (tab) => openMemory(tab),
+            /** The plain text background tasks see for a formatted message. */
+            tidyText,
+        });
+    } catch { /* never block init */ }
+}
+
 // ─── Init ────────────────────────────────────────────────────────────
 
 jQuery(() => {
@@ -430,6 +461,7 @@ jQuery(() => {
     hooks.entriesChanged = scheduleBudgetCheck;
     initUi();
     registerCommands();
+    exposeApi();
 
     const { eventSource, eventTypes } = ctx();
     // First, so every handler below sees fresh caches.

@@ -5,7 +5,7 @@
 import { createWorldInfoEntry } from '../../../../world-info.js';
 import {
     BOOK_KEY, adoptScene, chatState, ctx, findScenes, formatMembers, formatTemplate, getFlag, hooks,
-    newId, parseNames, positionOf, revealedNames, settings, sourceStatus, sourcesOf,
+    newId, parseNames, positionOf, revealedNames, settings, sourceStatus, sourcesOf, storyText,
 } from './core.js';
 import { extrasInstructions, parseSummary } from './extract.js';
 import { applyExtras, getClock, refreshListEntries, updateSheets, visibleThreads } from './memory.js';
@@ -211,7 +211,7 @@ function reportError(error, title) {
 
 function transcript(ids) {
     const chat = ctx().chat;
-    return ids.map(id => `${chat[id].name}: ${chat[id].mes}`).join('\n\n');
+    return ids.map(id => `${chat[id].name}: ${storyText(chat[id])}`).join('\n\n');
 }
 
 /**

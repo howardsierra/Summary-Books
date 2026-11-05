@@ -5,6 +5,7 @@
 // reveals per scene, and the timeline records for the lorebook.
 
 import { PROMPTS, upgradePrompts } from './prompts.js';
+import { tidyText } from './tidy.js';
 
 export const MODULE = 'privateScenes';
 export const FLAG = 'private_scene';
@@ -74,6 +75,10 @@ export const defaultSettings = Object.freeze({
     autoSheets: true,
     clockEnabled: true,
     clockAutoTrack: false,
+    // CALLBOARD and other formatted replies: read time and place from the tracker card.
+    clockFromTracker: true,
+    // Background tasks get plain text: panels, HTML, images and hidden notes tidied away.
+    tidyText: true,
 });
 
 export const ctx = () => SillyTavern.getContext();
@@ -104,6 +109,9 @@ export function settings() {
     }
     return saved;
 }
+
+/** A message's text as background tasks see it. */
+export const storyText = (message) => settings().tidyText ? tidyText(message?.mes) : String(message?.mes ?? '');
 
 export function chatState() {
     const meta = ctx().chatMetadata;

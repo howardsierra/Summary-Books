@@ -40,6 +40,7 @@ throwaway install.
 | windows | settings and Story Memory windows on desktop, iPad, iPhone |
 | launcher | the wand-menu launcher and the message action sheet |
 | race | simultaneous saves create one lorebook |
+| callboard | CALLBOARD-formatted replies: clock from the tracker card, tidied leak checks, the `window.PrivateScenes` API |
 
 Environment variables: `ST_URL`, `MOCK_PORT`, `SIDECAR_PORT`, `PS_TEST_OUT`
 (logs and screenshots; default `tests/.out`).

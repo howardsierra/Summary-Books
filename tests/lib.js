@@ -74,7 +74,7 @@ async function open(contextOptions) {
 const openMobile = () => open({ ...devices['iPhone 13'] });
 
 /** Settings every suite resets, so one suite's toggles never leak into the next. */
-const BASE_SETTINGS = { enabled: true, leakCheck: false, leakAutoRegenerate: false, reviewBeforeSave: false, hideAfterSave: false, autoMemory: false, consolidate: false, autoSheets: true, worldCondense: true, showBadges: true, branchCopy: true };
+const BASE_SETTINGS = { enabled: true, clockEnabled: true, clockAutoTrack: false, clockFromTracker: true, tidyText: true, leakCheck: false, leakAutoRegenerate: false, reviewBeforeSave: false, hideAfterSave: false, autoMemory: false, consolidate: false, autoSheets: true, worldCondense: true, showBadges: true, branchCopy: true };
 async function configure(page, overrides = {}) {
     await page.evaluate((s) => Object.assign(SillyTavern.getContext().extensionSettings.privateScenes, s), { ...BASE_SETTINGS, ...overrides });
 }

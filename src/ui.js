@@ -509,6 +509,8 @@ function addSettingsPanel() {
                             </div>
                             <label class="checkbox_label"><input id="ps_sidecar_fallback" type="checkbox"> <span>If it fails, use the main connection instead</span></label>
                         </div>
+                        <label class="checkbox_label"><input id="ps_tidy_text" type="checkbox"> <span>Send background tasks plain text</span></label>
+                        <small>Panels, HTML, images, cue lines and reasoning (from presets like CALLBOARD) are turned into short plain lines first. Saves tokens and keeps smaller models on track.</small>
                     </div>
 
                     <div class="ps-section">
@@ -525,6 +527,7 @@ function addSettingsPanel() {
                     <div class="ps-section">
                         <div class="ps-section-title"><i class="fa-solid fa-clock"></i> Story clock</div>
                         <label class="checkbox_label"><input id="ps_clock_enabled" type="checkbox"> <span>Track the story time and place and tell the model</span></label>
+                        <label class="checkbox_label"><input id="ps_clock_tracker" type="checkbox"> <span>Read it from a reply's tracker card (CALLBOARD), with no extra generation</span></label>
                         <label class="checkbox_label"><input id="ps_clock_auto" type="checkbox"> <span>Update it after every reply (one extra short generation)</span></label>
                         <small>Otherwise it updates from summaries and from <code>@time …:</code> / <code>@place …:</code> tags.</small>
                         <div class="ps-clock-settings"><span id="ps_clock_status"></span><div id="ps_clock_edit" class="menu_button menu_button_icon"><i class="fa-solid fa-pen"></i><span>Set</span></div></div>
@@ -658,6 +661,8 @@ function addSettingsPanel() {
         '#ps_threads': 'trackThreads',
         '#ps_clock_enabled': 'clockEnabled',
         '#ps_clock_auto': 'clockAutoTrack',
+        '#ps_clock_tracker': 'clockFromTracker',
+        '#ps_tidy_text': 'tidyText',
         '#ps_world_condense': 'worldCondense',
         '#ps_sidecar_fallback': 'sidecarFallback',
     };
