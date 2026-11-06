@@ -7,10 +7,11 @@ import fs from 'node:fs';
 const log = process.argv[2];
 let n = 0;
 let leakedOnce = false;
+let sceneOnce = false;
 let memoryCalls = 0;
 let sheetCalls = 0;
 function reset() {
-  n = 0; leakedOnce = false; memoryCalls = 0; sheetCalls = 0;
+  n = 0; leakedOnce = false; sceneOnce = false; memoryCalls = 0; sheetCalls = 0;
   fs.writeFileSync(log, '');
 }
 // A reply in the CALLBOARD preset's format: reasoning, a cue line, a tracker card, a panel, HTML and an image.
@@ -59,6 +60,7 @@ function reply(messages) {
   if (asked(messages, /CBREPLY/)) return CALLBOARD_REPLY;
   if (asked(messages, /PARTREPLY/)) return 'The party roars. Bob tells a terrible joke.\n\n<private with="Ana, Kael">\nAna leans close to Kael: "I stole the royal seal."\n</private>\n\nBack inside, the band strikes up a waltz.';
   if (asked(messages, /SCENESTART/)) return 'SCENE> private|Ana, Kael\nThe study door clicks shut behind them.';
+  if (asked(messages, /SCENEONCE/) && !sceneOnce) { sceneOnce = true; return 'SCENE> private|Ana, Kael\nThe study door clicks shut behind them.'; }
   if (asked(messages, /SCENEEND/)) return 'SCENE> end\nThey slip back into the ballroom.';
   if (asked(messages, /LEAKME/) && !leakedOnce) { leakedOnce = true; return 'Bob smirks at Ana: "So, how is the royal seal doing?"'; }
   return `Mock reply #${n}.`;

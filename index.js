@@ -8,7 +8,7 @@
 import {
     COMMON_KINDS, ctx, endScene, flagMessages, formatTemplate, getCommon, getFlag, getScene, hooks, inheritSwipeFlag,
     membersKey, parseNames, parseRange, revealedNames, saveSoon, sceneAt, setFlag, setRevealedNames, settings, startScene,
-    adoptScene, chatChanged, commonKind, ensureMid, findScenes, chatState, formatMembers, partId, messageParts,
+    adoptScene, chatChanged, commonKind, ensureMid, findScenes, chatState, formatMembers, partId, messageParts, newId, positionOf,
 } from './src/core.js';
 import {
     autoSaveScene, checkBranch, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
@@ -22,7 +22,7 @@ import { initUi, openSettingsWindow, refreshUi } from './src/ui.js';
 import { openMemory } from './src/hub.js';
 import { armCapture, captureChatPrompt, captureTextPrompt, openBudget, scheduleBudgetCheck } from './src/budget.js';
 import { tidyText } from './src/tidy.js';
-import { dropStrayTags, fromHtml, hideSceneNotes, mapParts, takeSceneNotes, toDisplayMarkers } from './src/parts.js';
+import { dropStrayTags, fromHtml, hideSceneNotes, mapParts, stampPartIds, takeSceneNotes, toDisplayMarkers } from './src/parts.js';
 
 const VERSION = '0.11.0';
 
@@ -102,7 +102,7 @@ globalThis.privateScenesInterceptor = async function (chat, _contextSize, _abort
         if (getFlag(message) || !/<\/?private\b/i.test(message?.mes ?? '')) continue;
         const mes = mapParts(message.mes, (part) => {
             anyPrivate = true;
-            const revealed = revealedNames(partId(message, part.index));
+            const revealed = revealedNames(partId(message, part));
             return `\n${formatTemplate(s.labelStart, part.members, revealed)}\n${part.body}\n${formatTemplate(s.labelEnd, part.members, revealed)}\n`;
         });
         chat[i] = { ...message, mes: dropStrayTags(mes).replace(/\n{3,}/g, '\n\n') };
@@ -176,11 +176,23 @@ function applyInlineTags(id) {
 
 // ─── Private parts and scene notes ───────────────────────────────────
 
-/** Gives messages with private parts a stable id, so each part keeps its secret's id. */
+/** Gives each private part an id in its tag, so it keeps its secret, reveals and summary through edits. */
 function stampParts(ids) {
     const chat = ctx().chat;
+    let changed = false;
     for (const id of ids ?? chat.keys()) {
-        if (/<private\b/i.test(chat[id]?.mes ?? '') && messageParts(chat[id]).length) ensureMid(chat[id]);
+        const message = chat[id];
+        if (!/<private\b/i.test(message?.mes ?? '') || !messageParts(message).length) continue;
+        ensureMid(message);
+        const stamped = stampPartIds(message.mes, () => newId('p').slice(2));
+        if (stamped === message.mes) continue;
+        if (Array.isArray(message.swipes) && message.swipes[message.swipe_id] === message.mes) message.swipes[message.swipe_id] = stamped;
+        message.mes = stamped;
+        changed = true;
+    }
+    if (changed) {
+        chatChanged();
+        saveSoon();
     }
 }
 
@@ -198,18 +210,35 @@ const undoToast = (text, undo) => toastr.info(`${text} Tap to undo.`, 'Private S
     timeOut: 12000,
     onclick: () => {
         undo();
-        chatChanged();
-        saveSoon();
-        ctx().saveMetadataDebounced();
-        refreshUi();
         toastr.info('Undone.', 'Private Scenes');
     },
 });
 
+const copyScene = (scene) => scene ? { members: [...scene.members], sceneId: scene.sceneId } : null;
+
+/**
+ * Takes back what the model's last scene note did: the scene goes back to how
+ * it was, and the reply that carried the note (if still there) gets the matching flag.
+ */
+function revertAiNote(note, message = null) {
+    const state = chatState();
+    if (note.kind === 'private' ? getScene()?.sceneId === note.sceneId : !getScene()) {
+        state.scene = copyScene(note.before);
+    }
+    if (message) setFlag(message, copyScene(note.before));
+    if (state.aiNote?.mid === note.mid) delete state.aiNote;
+    chatChanged();
+    saveSoon();
+    ctx().saveMetadataDebounced();
+    refreshUi();
+}
+
 /**
  * "SCENE> private|Ana, Kael" / "SCENE> end" lines a preset asks the model to
  * write: taken out of the reply, and (when allowed) acted on. Runs before the
- * reply is flagged, so a reply that starts a scene belongs to it.
+ * reply is flagged, so a reply that starts a scene belongs to it. What it did
+ * is remembered (chatState().aiNote) until the user's next message, so a swipe
+ * or a delete of that reply can take it back.
  */
 function applySceneNotes(id, message) {
     const { notes, text } = takeSceneNotes(message.mes);
@@ -219,26 +248,44 @@ function applySceneNotes(id, message) {
     chatChanged();
     if (!settings().aiScenes) return;
 
-    const before = getScene();
-    const note = notes.at(-1);
-    if (note.kind === 'end') {
-        if (!before) return;
-        endScene();
-        undoToast(`🤫 Private scene ended: ${formatMembers(before.members)}.`, () => {
-            chatState().scene = before;
-            setFlag(message, { members: before.members, sceneId: before.sceneId });
-        });
-        return;
+    const before = copyScene(getScene());
+    const last = notes.at(-1);
+    if (last.kind === 'end' ? !before : before && membersKey(before.members) === membersKey(last.members)) return;
+    if (last.kind === 'end') endScene();
+    else startScene(last.members);
+    const note = { kind: last.kind, mid: ensureMid(message), before, sceneId: getScene()?.sceneId ?? null };
+    chatState().aiNote = note;
+    ctx().saveMetadataDebounced();
+    undoToast(last.kind === 'end'
+        ? `🤫 Private scene ended: ${formatMembers(before.members)}.`
+        : `🤫 Private scene started: ${formatMembers(last.members)}.`, () => revertAiNote(note, ctx().chat[positionOf(note.mid)] ?? null));
+}
+
+/** Swiping away from (or deleting) the reply whose note started or ended a scene takes the note back. */
+function takeBackAiNote({ swipedId = null } = {}) {
+    const note = chatState().aiNote;
+    if (!note) return;
+    const at = positionOf(note.mid);
+    if (swipedId !== null) {
+        if (at !== swipedId) return;
+        revertAiNote(note, ctx().chat[at]);
+    } else {
+        if (at !== -1) return;
+        // A deleted opening reply only undoes the scene if nothing else is in it yet.
+        if (note.kind === 'private' && findScenes().some(scene => scene.id === note.sceneId)) {
+            delete chatState().aiNote;
+            return;
+        }
+        revertAiNote(note);
     }
-    if (before && membersKey(before.members) === membersKey(note.members)) return;
-    startScene(note.members);
-    undoToast(`🤫 Private scene started: ${formatMembers(note.members)}.`, () => {
-        chatState().scene = before;
-        setFlag(message, before ? { members: before.members, sceneId: before.sceneId } : null);
-    });
+    toastr.info(note.kind === 'end'
+        ? `The reply that ended the scene with ${formatMembers(note.before.members)} is gone, so the scene is running again.`
+        : 'The reply that started a private scene is gone, so that scene was undone.', 'Private Scenes');
 }
 
 function onMessageSent(id) {
+    // The user carried on: the model's last scene note stands.
+    delete chatState().aiNote;
     applyInlineTags(id);
     chatChanged(); // the tags were cut from the text
     const message = ctx().chat[id];
@@ -278,6 +325,7 @@ async function onMessageReceived(id, type) {
 }
 
 function onSwiped(id) {
+    takeBackAiNote({ swipedId: Number(id) });
     inheritSwipeFlag(ctx().chat[id]);
     refreshUi();
     notifyStale();
@@ -294,7 +342,8 @@ function onChatChanged() {
 }
 
 function onChatEdited(id) {
-    if (Number.isInteger(Number(id))) stampParts([Number(id)]);
+    if (Number.isInteger(Number(id)) && ctx().chat[Number(id)]) stampParts([Number(id)]);
+    takeBackAiNote();
     refreshUi();
     notifyStale();
 }

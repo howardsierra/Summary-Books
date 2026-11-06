@@ -3,8 +3,8 @@
 
 import {
     COMMON_KINDS, adoptScene, allNames, chatState, commonKind, ctx, defaultSettings, endScene, ensureMid, findScenes,
-    formatMembers, getCommon, getFlag, getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames,
-    settings, startScene,
+    formatMembers, getCommon, getFlag, getMembers, getScene, messageParts, nameHue, parseNames, partId, revealedNames,
+    setRevealedNames, settings, startScene,
 } from './core.js';
 import { refreshSceneEntry, saveMemory, saveStorySoFar, staleItems } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
@@ -246,16 +246,36 @@ async function chooseVisibility(id) {
     if (visibility) await setVisibility([id], visibility);
 }
 
+/**
+ * The last text selected in a message, remembered as it's made: tapping the
+ * message's menu buttons (on phones especially) clears the selection first.
+ */
+let lastSelection = null;
+function rememberSelection() {
+    const selection = window.getSelection();
+    const text = selection?.toString().trim();
+    const mes = text ? $(selection.anchorNode).closest('#chat .mes') : $();
+    if (!mes.length) return;
+    // Which private part (<private with="…">) the selection starts in, if any.
+    const partEl = $(selection.anchorNode).closest('[data-ps-part]')[0];
+    lastSelection = {
+        id: Number(mes.attr('mesid')),
+        text,
+        partIndex: partEl ? mes.find('[data-ps-part]').index(partEl) : -1,
+        at: Date.now(),
+    };
+}
+
 /** The one Private Scenes button on each message: a small sheet of things to do with it. */
 async function onMessageButtonClick(event) {
     const mes = $(event.currentTarget).closest('.mes');
     const id = Number(mes.attr('mesid'));
     const message = ctx().chat[id];
     if (!message) return;
-    // Read the selection now; opening the sheet would clear it.
-    const selection = window.getSelection();
-    const selected = selection && mes[0].contains(selection.anchorNode) ? selection.toString().trim() : '';
-    await openMessageSheet(id, selected);
+    rememberSelection();
+    const recent = lastSelection?.id === id && Date.now() - lastSelection.at < 60_000 ? lastSelection : null;
+    lastSelection = null;
+    await openMessageSheet(id, recent?.text ?? '', recent?.partIndex ?? -1);
 }
 
 export async function onSceneButtonClick() {
@@ -315,11 +335,27 @@ export const jumpTo = (id) => ctx().executeSlashCommandsWithOptions(`/chat-jump 
 
 // ─── Pinned facts ────────────────────────────────────────────────────
 
+/**
+ * The private part a pinned fact comes from: the one the selection started in,
+ * else the one whose text contains the selection. Null when it's public text.
+ */
+export function partForSelection(message, selected = '', partIndex = -1) {
+    const parts = messageParts(message);
+    if (!parts.length) return null;
+    if (parts[partIndex]) return parts[partIndex];
+    const squash = (text) => String(text).replace(/[*_"“”]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const wanted = squash(selected);
+    return wanted ? parts.find(part => squash(part.body).includes(wanted)) ?? null : null;
+}
+
 /** Pins a fact from a message, starting from the text that was selected in it. */
-async function pinFromMessage(id, selected = '') {
+async function pinFromMessage(id, selected = '', partIndex = -1) {
     const message = ctx().chat[id];
     if (!message) return;
-    const members = getMembers(message);
+    // A fact from a private part is as private as the part.
+    const part = partForSelection(message, selected, partIndex);
+    const members = getMembers(message) ?? part?.members ?? null;
+    const sceneId = getFlag(message)?.sceneId ?? (part ? partId(message, part) : null);
 
     const c = ctx();
     const header = popupHeader('fa-thumbtack', 'Pin a fact', members
@@ -327,7 +363,7 @@ async function pinFromMessage(id, selected = '') {
         : `From message ${id}. The model will always remember it.`);
     const text = await c.callGenericPopup(header, c.POPUP_TYPE.INPUT, selected, { rows: 3, wide: true, okButton: 'Pin' });
     if (typeof text !== 'string' || !text.trim()) return;
-    await addFact(text, members, ensureMid(message), getFlag(message)?.sceneId ?? null);
+    await addFact(text, members, ensureMid(message), sceneId);
     toastr.success('Fact pinned.', 'Private Scenes');
 }
 
@@ -723,6 +759,7 @@ function addSettingsPanel() {
 }
 
 export function initUi() {
+    document.addEventListener('selectionchange', () => { try { rememberSelection(); } catch { /* ignore */ } });
     addMessageButtons();
     addSceneBar();
     addWandMenuItems();
@@ -1216,7 +1253,7 @@ function visibilityLabel(message) {
 }
 
 /** The per-message sheet: who knows, pin a fact, summarize up to here. */
-async function openMessageSheet(id, selected) {
+async function openMessageSheet(id, selected, partIndex = -1) {
     const message = ctx().chat[id];
     const state = chatState();
     const from = Math.min(state.memoryCursor, id);
@@ -1234,6 +1271,6 @@ async function openMessageSheet(id, selected) {
 
     const chosen = await openSheet(content, 'ps-message-sheet-dialog');
     if (chosen === 'visibility') await chooseVisibility(id);
-    if (chosen === 'pin') await pinFromMessage(id, selected);
+    if (chosen === 'pin') await pinFromMessage(id, selected, partIndex);
     if (chosen === 'summarize') await saveMemory(from, id);
 }

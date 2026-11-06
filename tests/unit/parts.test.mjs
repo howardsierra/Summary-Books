@@ -56,3 +56,13 @@ test('scene notes are read and removed', () => {
     assert.equal(takeSceneNotes('Nothing here.').text, 'Nothing here.');
     assert.equal(hideSceneNotes('SCENE> end\nHi').trim(), 'Hi');
 });
+
+test('stampPartIds gives each part a lasting id, once', async () => {
+    const { stampPartIds } = await import('../../src/parts.js');
+    let n = 0;
+    const once = stampPartIds('A <private with="Ana">x</private> B <private with="Bob" id="kept">y</private> C <private with=Cy>z', () => `id${++n}`);
+    assert.equal(once, 'A <private with="Ana" id="id2">x</private> B <private with="Bob" id="kept">y</private> C <private with=Cy id="id1">z');
+    assert.deepEqual(parseParts(once).map(p => [p.id, p.members, p.body]), [['id2', ['Ana'], 'x'], ['kept', ['Bob'], 'y'], ['id1', ['Cy'], 'z']]);
+    assert.equal(stampPartIds(once, () => 'new'), once, 'already stamped: unchanged');
+    assert.equal(stampPartIds('No parts.', () => 'new'), 'No parts.');
+});

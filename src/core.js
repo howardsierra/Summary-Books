@@ -456,8 +456,8 @@ export function findScenes() {
     return c.scenes.map(scene => ({ ...scene, ids: [...scene.ids] }));
 }
 
-/** Stable id of a private part: its message id plus its position in the message. */
-export const partId = (message, index) => `pp_${message?.extra?.[MID] ?? 'x'}_${index}`;
+/** A private part's secret id: the id in its tag, else its message id plus its position. */
+export const partId = (message, part) => part.id ? `pp_${part.id}` : `pp_${message?.extra?.[MID] ?? 'x'}_${part.index}`;
 
 /** Private parts in a message that isn't private as a whole (whole-message flags win). */
 export function messageParts(message) {
@@ -489,7 +489,7 @@ function scanScenes(chat) {
     chat.forEach((message, i) => {
         if (!message?.mes?.includes?.('<') || !/<private\b/i.test(message.mes)) return;
         for (const part of messageParts(message)) {
-            parts.push({ id: partId(message, part.index), members: part.members, ids: [i], legacy: false, part: { index: part.index, body: part.body } });
+            parts.push({ id: partId(message, part), members: part.members, ids: [i], legacy: false, part: { index: part.index, body: part.body } });
         }
     });
     return [...scenes.values(), ...parts]

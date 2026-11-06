@@ -11,6 +11,8 @@
 const OPEN = /<private\b([^>]*)>/gi;
 const CLOSE = /<\/private\s*>/i;
 const WITH = /\bwith\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
+/** id="…" the extension adds to each tag, so a part keeps its secret through edits. */
+const ID = /\bid\s*=\s*["']?([\w-]+)/i;
 
 const splitNames = (text) => {
     const seen = new Set();
@@ -24,8 +26,9 @@ const splitNames = (text) => {
 
 /**
  * The private parts of a message, in order.
- * @returns {{index: number, members: string[], body: string, start: number, end: number, closed: boolean}[]}
- *   start/end span the whole tag, so text.slice(start, end) is the part as written.
+ * @returns {{index: number, id: string|null, members: string[], body: string, start: number, openEnd: number, end: number, closed: boolean}[]}
+ *   start/end span the whole tag, so text.slice(start, end) is the part as written;
+ *   openEnd is where the opening tag ends.
  */
 export function parseParts(text) {
     const source = String(text ?? '');
@@ -54,7 +57,8 @@ export function parseParts(text) {
         } else {
             bodyEnd = end = Math.min(openAt, source.length);
         }
-        if (members.length) parts.push({ index: parts.length, members, body: source.slice(bodyStart, bodyEnd).trim(), start: match.index, end, closed });
+        const id = match[1].match(ID)?.[1] ?? null;
+        if (members.length) parts.push({ index: parts.length, id, members, body: source.slice(bodyStart, bodyEnd).trim(), start: match.index, openEnd: bodyStart, end, closed });
         OPEN.lastIndex = end;
     }
     return parts;
@@ -74,6 +78,20 @@ export function mapParts(text, replace) {
         at = part.end;
     }
     return out + source.slice(at);
+}
+
+/**
+ * Gives every part without an id one (from makeId), in its opening tag.
+ * Returns the same string when nothing needed an id.
+ */
+export function stampPartIds(text, makeId) {
+    const source = String(text ?? '');
+    let out = source;
+    for (const part of parseParts(source).filter(p => !p.id).reverse()) {
+        const close = part.openEnd - 1; // the opening tag's ">"
+        out = `${out.slice(0, close).replace(/\s*\/?$/, '')} id="${makeId()}"${out.slice(close)}`;
+    }
+    return out;
 }
 
 /** The message as everyone else knows it: private parts taken out. */

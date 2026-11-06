@@ -82,6 +82,8 @@ Back inside, the band strikes up a waltz.
 - **For the model,** only that part gets the private labels. Everyone else still knows about the joke and the waltz.
 - **It's a secret like any other:** it's saved to the timeline (when auto-save is on), shows up in *Who knows what*, can be revealed, and the leak checker watches for it. Story memory leaves it out of the public story.
 - A tag that's never closed runs to the end of the message. Your saved message keeps the tag, so you can edit it like any text.
+- Each tag gets a short `id="…"` the first time it's seen. It keeps the part's secret, reveals and summary attached to it when you edit the message or add more parts.
+- **Pin a fact** from a tinted part (select the text, then 🕵️ → *Pin a fact*) and the fact is private to the same people.
 - A message that's private as a whole ignores the tags inside it.
 
 ### Scenes the model starts and ends
@@ -93,7 +95,7 @@ A preset can ask the model to write a line at the top of a reply:
 | `SCENE> private\|Ana, Kael` | A private scene starts for Ana and Kael, and this reply is part of it |
 | `SCENE> end` | The running scene ends; this reply is public |
 
-The line is removed from the reply (and never shows, even while the reply streams), and a notice tells you what happened, with **Undo**. [CALLBOARD](https://github.com/howardsierra/callboard)'s 🤫 Private Scenes toggle teaches the model when to do this. Turn it off with **Let the model start and end private scenes** in settings; the lines are still removed.
+The line is removed from the reply (and never shows, even while the reply streams), and a notice tells you what happened, with **Undo**. Swiping that reply for a new version, or deleting it, takes the scene change back too (until you send your next message): a new version without the line stays public, and a scene the model ended is running again. [CALLBOARD](https://github.com/howardsierra/callboard)'s 🤫 Private Scenes toggle teaches the model when to do this. Turn it off with **Let the model start and end private scenes** in settings; the lines are still removed.
 
 While a scene is running, a glowing bar above the chat box shows who's in it, with buttons to edit it, open the timeline, or end it.
 

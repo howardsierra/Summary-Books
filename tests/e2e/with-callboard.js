@@ -1,26 +1,22 @@
 // Both extensions in one SillyTavern, with the real CALLBOARD preset and its regex.
 // Needs CALLBOARD Suite installed as extensions/callboard and the preset saved
-// as "CALLBOARD v1.6.5" (see tests/README.md). Skipped when they're missing.
+// as "CALLBOARD v…" (see tests/README.md). Skipped when they're missing.
 const L = require('../lib');
 const { check, eq, section } = L;
 
 L.suite('with-callboard', async (page) => {
     await L.dismissPopups(page);
-    const previous = await page.evaluate(() => SillyTavern.getContext().getPresetManager('openai').getSelectedPresetName());
-    const preset = await page.evaluate(() => {
-        const pm = SillyTavern.getContext().getPresetManager('openai');
-        const name = pm.getAllPresets().find(n => /^CALLBOARD v/.test(n));
-        if (name) pm.selectPreset(pm.findPreset(name));
-        return name ?? null;
-    });
+    const preset = await page.evaluate(() => SillyTavern.getContext().getPresetManager('openai').getAllPresets().find(n => /^CALLBOARD v/.test(n)) ?? null);
     const hasSuite = await page.evaluate(() => !!SillyTavern.getContext().SlashCommandParser?.commands?.['cb-check']);
     if (!preset || !hasSuite) {
         check('CALLBOARD Suite and preset installed (skipped otherwise)', true);
         return;
     }
-    await page.waitForTimeout(1500);
-    await L.dismissPopups(page); // "allow the preset's regex?" → yes
-    await L.start(page, { leakCheck: true, clockAutoTrack: false, clockFromTracker: true, tidyText: true });
+    const previous = await L.selectPreset(page, preset);
+    // L.start would switch back to the default preset, so do its steps after choosing CALLBOARD.
+    await L.configure(page, { leakCheck: true, clockAutoTrack: false, clockFromTracker: true, tidyText: true });
+    await L.setupApi(page);
+    await L.ensureCharacter(page);
     eq('CALLBOARD preset selected', await page.evaluate(() => SillyTavern.getContext().getPresetManager('openai').getSelectedPresetName()), preset);
 
     section('CALLBOARD board');
@@ -83,10 +79,5 @@ L.suite('with-callboard', async (page) => {
     await L.shot(page, 'with-callboard');
 
     // Put the previous preset back, so later suites run on SillyTavern's own prompt.
-    await page.evaluate((name) => {
-        const pm = SillyTavern.getContext().getPresetManager('openai');
-        pm.selectPreset(pm.findPreset(name));
-    }, previous);
-    await page.waitForTimeout(1500);
-    await L.dismissPopups(page);
+    await L.selectPreset(page, /^CALLBOARD/.test(previous) ? 'Default' : previous);
 });

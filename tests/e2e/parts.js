@@ -11,7 +11,7 @@ L.suite('parts', async (page) => {
     await L.send(page, 'PARTREPLY The ball goes on.');
     let messages = await chat();
     const partId = messages.length - 1;
-    check('saved text keeps the tag', /<private with="Ana, Kael">/.test(messages[partId].mes));
+    check('saved text keeps the tag', /<private with="Ana, Kael"[^>]*>/.test(messages[partId].mes));
     eq('message itself is not private', messages[partId].flag, null);
     const shown = await page.evaluate((id) => {
         const box = document.querySelector(`#chat .mes[mesid="${id}"] .mes_text`);
@@ -32,7 +32,7 @@ L.suite('parts', async (page) => {
     const prompt = JSON.stringify(L.chatPrompt());
     const reply = L.chatPrompt().map(m => m.content).find(c => /terrible joke/.test(c)) ?? '';
     eq('labels wrap just the part', reply, 'The party roars. Bob tells a terrible joke.\n\n[PRIVATE — known only to: Ana and Kael]\nAna leans close to Kael: "I stole the royal seal."\n[END PRIVATE]\n\nBack inside, the band strikes up a waltz.');
-    check('no raw tags in the prompt', !/<\/?private/.test(prompt));
+    check('no raw tags in the prompt', !/<\/?private/.test(reply));
     const leak = L.requests().slice(seen).find(r => L.kindOf(r) === 'leak');
     check('leak check knows the secret', /#1 \(known only to: Ana and Kael\)[^#]*royal seal/.test(JSON.stringify(leak?.body.messages ?? '')));
 
@@ -67,6 +67,80 @@ L.suite('parts', async (page) => {
     await page.waitForTimeout(500);
     eq('undo stops the scene', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene), null);
     eq('and unflags the reply', (await chat()).at(-1).flag, null);
+
+    section('stable part ids');
+    const firstSecret = await page.evaluate((id) => {
+        const c = SillyTavern.getContext();
+        return { mes: c.chat[id].mes, keys: Object.keys(c.chatMetadata.privateScenes.timeline).filter(k => k.startsWith('pp_')) };
+    }, partId);
+    check('tag got an id', /<private with="Ana, Kael" id="[\w-]+">/.test(firstSecret.mes), firstSecret.mes);
+    const secretsBefore = await page.evaluate(() => window.PrivateScenes.status().secrets);
+    await page.evaluate(async (id) => {
+        const c = SillyTavern.getContext();
+        c.chat[id].mes = c.chat[id].mes.replace('The party roars.', 'The party roars. <private with="Bob">Bob pockets a spoon.</private>');
+        await c.eventSource.emit(c.eventTypes.MESSAGE_EDITED, id);
+        c.updateMessageBlock(id, c.chat[id]);
+    }, partId);
+    await page.waitForTimeout(500);
+    const after = await page.evaluate((id) => {
+        const scenes = window.PrivateScenes.status();
+        const c = SillyTavern.getContext();
+        return { mes: c.chat[id].mes, secrets: scenes.secrets };
+    }, partId);
+    check('new part stamped too', (after.mes.match(/ id="/g) ?? []).length === 2, after.mes);
+    const sealId = after.mes.match(/<private with="Ana, Kael" id="([\w-]+)">/)?.[1];
+    eq('the seal keeps its secret id', firstSecret.keys, [`pp_${sealId}`]);
+    eq('one more secret', after.secrets, secretsBefore + 1);
+
+    section('pin a fact from a private part');
+    await page.evaluate((id) => {
+        const part = document.querySelector(`#chat .mes[mesid="${id}"] [data-ps-part="Ana, Kael"]`);
+        const range = document.createRange();
+        range.selectNodeContents(part.querySelector('p') ?? part);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }, partId);
+    await page.locator(`#chat .mes[mesid="${partId}"] .extraMesButtonsHint`).click();
+    await page.locator(`#chat .mes[mesid="${partId}"] .ps_toggle`).click();
+    await page.locator('dialog[open] [data-action="pin"]').click();
+    const pinInput = page.locator('dialog[open] textarea.popup-input').last();
+    await pinInput.waitFor();
+    await pinInput.fill('Ana has the royal seal.');
+    await page.locator('dialog[open] .popup-button-ok').last().click();
+    await page.waitForTimeout(800);
+    const fact = (await L.state(page)).facts.find(f => /royal seal/.test(f.text));
+    eq('fact is private to the part\'s people', fact?.members, ['Ana', 'Kael']);
+    eq('and follows that secret', fact?.sceneId, `pp_${sealId}`);
+
+    section('swipe or delete takes a scene note back');
+    await L.send(page, 'SCENEONCE Ana pulls Kael aside again.');
+    eq('scene started', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene?.members ?? null), ['Ana', 'Kael']);
+    const len = await page.evaluate(() => SillyTavern.getContext().chat.length);
+    await page.locator('#chat .mes.last_mes .swipe_right').first().click();
+    await page.waitForFunction(() => {
+        const m = SillyTavern.getContext().chat.at(-1);
+        return (m.swipes?.length ?? 0) > 1 && !document.querySelector('#mes_stop:not([style*="none"])')?.offsetParent;
+    }, null, { timeout: 30000 });
+    await page.waitForTimeout(800);
+    eq('swiping the opening reply undoes the scene', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene), null);
+    eq('and the new reply is public', (await chat()).at(-1).flag, null);
+    eq('same message slot', await page.evaluate(() => SillyTavern.getContext().chat.length), len);
+
+    await L.send(page, 'SCENESTART Into the study.');
+    await L.run(page, '/del 1');
+    await page.waitForTimeout(800);
+    eq('deleting the opening reply undoes the scene', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene), null);
+
+    await L.send(page, 'SCENESTART Into the study, for real.');
+    await L.send(page, 'Ana: "Lock it."');
+    await L.send(page, 'SCENEEND Back to the ball.');
+    eq('scene ended', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene), null);
+    await L.run(page, '/del 1');
+    await page.waitForTimeout(800);
+    eq('deleting the closing reply brings the scene back', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene?.members ?? null), ['Ana', 'Kael']);
+    await L.run(page, '/private-end');
+    await page.waitForTimeout(500);
 
     section('turned off');
     await L.configure(page, { aiScenes: false });
