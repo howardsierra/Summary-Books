@@ -1,10 +1,31 @@
 // Private parts (<private with="…">…</private> inside a public message) and
 // scene notes (SCENE> private|… / SCENE> end) that a preset asks the model to write.
+// Runs twice: on SillyTavern's own prompt, and on the CALLBOARD preset with its
+// regex and 🤫 Private Scenes lit (skipped when CALLBOARD isn't installed).
 const L = require('../lib');
 const { check, eq, section } = L;
 
-L.suite('parts', async (page) => {
-    await L.start(page, { autoSave: true, aiScenes: true, leakCheck: true });
+const SETTINGS = { autoSave: true, aiScenes: true, leakCheck: true };
+
+const body = (withCallboard) => async (page) => {
+    let previous = null;
+    if (withCallboard) {
+        const preset = await page.evaluate(() => SillyTavern.getContext().getPresetManager('openai').getAllPresets().find(n => /^CALLBOARD v/.test(n)) ?? null);
+        const hasSuite = await page.evaluate(() => !!SillyTavern.getContext().SlashCommandParser?.commands?.['cb-check']);
+        if (!preset || !hasSuite) {
+            check('CALLBOARD Suite and preset installed (skipped otherwise)', true);
+            return;
+        }
+        await L.dismissPopups(page);
+        previous = await L.selectPreset(page, preset);
+        await L.configure(page, SETTINGS);
+        await L.setupApi(page);
+        await L.ensureCharacter(page);
+        await L.run(page, '/cb-on private scenes');
+        eq('CALLBOARD preset selected', await page.evaluate(() => SillyTavern.getContext().getPresetManager('openai').getSelectedPresetName()), preset);
+    } else {
+        await L.start(page, SETTINGS);
+    }
     const chat = () => page.evaluate(() => SillyTavern.getContext().chat.map(m => ({ mes: m.mes, flag: m.extra?.private_scene?.members ?? null })));
 
     section('a private part in a reply');
@@ -147,5 +168,11 @@ L.suite('parts', async (page) => {
     await L.send(page, 'SCENESTART Once more.');
     eq('no scene', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.scene), null);
     check('note still hidden from the text', !/SCENE>/.test((await chat()).at(-1).mes));
-    await L.shot(page, 'parts');
-});
+    await L.shot(page, withCallboard ? 'parts-callboard' : 'parts');
+    if (withCallboard) await L.selectPreset(page, /^CALLBOARD/.test(previous) ? 'Default' : previous);
+};
+
+(async () => {
+    await L.suite('parts', body(false));
+    await L.suite('parts: callboard', body(true));
+})();
