@@ -6,7 +6,7 @@ import {
     formatMembers, getCommon, getFlag, getMembers, getScene, messageParts, nameHue, parseNames, partId, revealedNames,
     setRevealedNames, settings, startScene,
 } from './core.js';
-import { forceOwnBook, rebuildAll, redoMemory, refreshSceneEntry, saveMemory, saveSecretsNow, saveStorySoFar, staleItems, unsavedScenes } from './lorebook.js';
+import { forceOwnBook, rebuildAll, saveEverythingNew, redoMemory, refreshSceneEntry, saveMemory, saveSecretsNow, saveStorySoFar, staleItems, unsavedScenes } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
 import { addFact, getClock, setVisibility, sheetList } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
@@ -16,7 +16,7 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.12.0';
+const EXTENSION_VERSION = '0.12.1';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 import { lastMeasure, openBudget } from './budget.js';
 
@@ -1309,6 +1309,9 @@ export async function openSummarizeSheet() {
     const content = $('<div class="ps-summarize-sheet"></div>');
     content.append(sheetHeader('fa-scroll', 'Summarize', 'Save to the lorebook now, or redo what is already there.'));
     content.append(
+        actionRow('everything', 'fa-wand-magic-sparkles', 'Summarize everything new',
+            pending || unsaved.length ? [pending ? `messages ${state.memoryCursor}–${last}` : null, unsaved.length ? count(unsaved.length, 'secret') : null].filter(Boolean).join(' + ')
+                : 'Everything is already saved', { tone: 'story', disabled: !pending && !unsaved.length }),
         actionRow('new', 'fa-scroll', 'Summarize the new story', pending ? `Messages ${state.memoryCursor}–${last}, public parts only` : 'Nothing new since the last summary',
             { tone: 'story', disabled: !pending }),
         actionRow('secrets', 'fa-user-secret', 'Save secrets now', unsaved.length
@@ -1325,6 +1328,7 @@ export async function openSummarizeSheet() {
     );
 
     const chosen = await openSheet(content, 'ps-summarize-sheet-dialog');
+    if (chosen === 'everything') await saveEverythingNew();
     if (chosen === 'new') await saveStorySoFar();
     if (chosen === 'secrets') await saveSecretsNow();
     if (chosen === 'redo') {

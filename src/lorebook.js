@@ -631,6 +631,19 @@ export async function saveSecretsNow({ all = false, quiet = false } = {}) {
     return saved;
 }
 
+/** Catches up: saves every unsaved or changed secret, then the story since the last summary. */
+export async function saveEverythingNew() {
+    const secrets = await saveSecretsNow({ quiet: true });
+    const state = chatState();
+    const last = ctx().chat.length - 1;
+    const story = state.memoryCursor <= last && publicIds(state.memoryCursor, last).length
+        ? await redoMemory(state.memoryCursor, last, { quiet: true }) : 0;
+    toastr[secrets || story ? 'success' : 'info'](secrets || story
+        ? `Saved ${secrets} ${secrets === 1 ? 'secret' : 'secrets'} and ${story} story ${story === 1 ? 'entry' : 'entries'}.`
+        : 'Everything is already saved.', 'Private Scenes');
+    return { secrets, story };
+}
+
 /** Rebuilds all memory: every secret and the whole public story, from the first message. */
 export async function rebuildAll() {
     const secrets = await saveSecretsNow({ all: true, quiet: true });

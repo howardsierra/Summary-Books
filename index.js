@@ -11,7 +11,7 @@ import {
     adoptScene, chatChanged, commonKind, ensureMid, findScenes, chatState, formatMembers, partId, messageParts, newId, positionOf,
 } from './src/core.js';
 import {
-    autoSaveScene, checkBranch, forceOwnBook, hasSavedScenes, rebuildAll, redoMemory, saveSecretsNow, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
+    autoSaveScene, checkBranch, forceOwnBook, saveEverythingNew, hasSavedScenes, rebuildAll, redoMemory, saveSecretsNow, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
     saveStorySoFar,
 } from './src/lorebook.js';
 import {
@@ -484,6 +484,15 @@ function registerCommands() {
             + '<code>all=true</code> saves every secret again.',
         namedArgumentList: [SlashCommandNamedArgument.fromProps({ name: 'all', description: 'Save every secret again', typeList: [ARGUMENT_TYPE.BOOLEAN], defaultValue: 'false' })],
         callback: async (args) => String(await saveSecretsNow({ all: String(args.all) === 'true' })),
+    });
+
+    add({
+        name: 'memory-all',
+        helpString: 'Summarizes everything not saved yet: unsaved or changed secrets (including a running scene) and the story since the last summary.',
+        callback: async () => {
+            const { secrets, story } = await saveEverythingNew();
+            return `${secrets} secrets, ${story} story entries`;
+        },
     });
 
     add({

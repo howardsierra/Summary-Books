@@ -30,7 +30,7 @@ L.suite('force', async (page) => {
     await openSummarize(page);
     check('tile opens the sheet even when up to date', true);
     const rows = await page.locator('dialog[open] .ps-action').evaluateAll(els => els.map(e => `${e.dataset.action}${e.classList.contains('disabled') ? ':off' : ''}`));
-    eq('rows', rows, ['new:off', 'secrets:off', 'redo', 'rebuild', 'own-copy', 'own-fresh']);
+    eq('rows', rows, ['everything:off', 'new:off', 'secrets:off', 'redo', 'rebuild', 'own-copy', 'own-fresh']);
     await L.shot(page, 'force-sheet');
 
     section('redo a range');
@@ -70,6 +70,26 @@ L.suite('force', async (page) => {
     await L.run(page, '/private-end');
     await page.waitForTimeout(1500);
 
+    section('summarize everything new');
+    await L.send(page, 'Bob opens the gates.');
+    await L.run(page, '/private-scene Bob, Kael');
+    await L.send(page, 'Bob tells Kael the gate code.');
+    await L.run(page, '/private-end');
+    await page.waitForTimeout(500);
+    await L.configure(page, { autoSave: false });
+    await L.run(page, '/private-scene Ana, Bob');
+    await L.send(page, 'Ana hands Bob a key.');
+    await openSummarize(page);
+    check('row names both kinds', /messages .*\+ .*secret/.test(await page.locator('dialog[open] .ps-action[data-action="everything"]').innerText()));
+    const cursor = await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.memoryCursor);
+    await page.locator('dialog[open] .ps-action[data-action="everything"]').click();
+    await page.waitForFunction((c) => SillyTavern.getContext().chatMetadata.privateScenes.memoryCursor > c, cursor, { timeout: 30000 });
+    await page.waitForTimeout(1000);
+    eq('nothing left unsaved', await page.evaluate(async () => (await import('/scripts/extensions/third-party/private-scenes/src/lorebook.js')).unsavedScenes().length), 0);
+    eq('story caught up', await page.evaluate(() => SillyTavern.getContext().chatMetadata.privateScenes.memoryCursor), await page.evaluate(() => SillyTavern.getContext().chat.length));
+    await L.run(page, '/private-end');
+    await L.configure(page, { autoSave: true });
+
     section('rebuild');
     const secretsBefore = L.requests().filter(r => L.kindOf(r) === 'secret-summary').length;
     await L.run(page, '/memory-rebuild');
@@ -95,7 +115,7 @@ L.suite('force', async (page) => {
     await page.waitForFunction((b) => SillyTavern.getContext().chatMetadata.world_info !== b, name, { timeout: 15000 });
     await page.waitForTimeout(800);
     const fresh = await page.evaluate(() => { const s = SillyTavern.getContext().chatMetadata.privateScenes; return { memories: s.memories.length, secrets: Object.keys(s.timeline).length, cursor: s.memoryCursor, flagged: SillyTavern.getContext().chat.filter(m => m.extra?.private_scene).length }; });
-    eq('memories forgotten, flags kept', fresh, { memories: 0, secrets: 0, cursor: 0, flagged: 2 });
+    eq('memories forgotten, flags kept', fresh, { memories: 0, secrets: 0, cursor: 0, flagged: 6 });
     eq('new lorebook is empty', (await L.book(page)).length, 0);
     check('previous lorebook still exists', await page.evaluate((b) => SillyTavern.getContext().getWorldInfoNames().includes(b), name));
 });

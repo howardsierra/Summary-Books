@@ -187,6 +187,7 @@ Turn on **Hide the original messages after saving** to keep the context small. T
 
 The launcher's **Summarize** tile always opens a sheet, even when everything is up to date:
 
+- **Summarize everything new:** both of the next two in one tap: every secret that isn't saved or has changed, then the story since the last summary (split into parts if it's long). `/memory-all` does the same.
 - **Summarize the new story:** everything since the last story entry, including the newest messages that automatic summaries leave alone.
 - **Save secrets now:** every secret that has no entry yet or whose messages changed, *including a scene that is still running*. The scene keeps running.
 - **Summarize messages again…:** pick a range such as `10-40`. The story entries (and chapters) overlapping it are replaced; a range that only touches part of an entry is widened to the whole entry, so nothing is left half-covered. Long ranges are split into parts of *Every N public messages*, then merged into chapters as usual.
@@ -265,6 +266,7 @@ Your saved messages are never changed; the tidying only affects what the backgro
 | `/memory-save` | Summarizes the public story since the last memory. `at=0-40` sets the range |
 | `/memory-redo at=10-40` | Summarizes messages again, replacing the story entries there. Without `at`, the whole chat |
 | `/secrets-save` | Saves secrets that aren't saved or have changed, including a running scene. `all=true` saves every one again |
+| `/memory-all` | Summarizes everything not saved yet: secrets, then the new story |
 | `/memory-rebuild` | Summarizes every secret and the whole story again |
 | `/private-own-book` | Gives this chat its own copy of the lorebook. `fresh=true` starts a new, empty one |
 | `/memory` | Opens Story Memory. Add a tab name to open it there: `/memory threads` |
