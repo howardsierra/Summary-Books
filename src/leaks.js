@@ -2,7 +2,7 @@
 // isn't in on a secret mentions, hints at, or acts on it.
 
 import { llm } from './llm.js';
-import { LEAK, chatState, ctx, findScenes, formatKnowers, getFlag, hooks, revealedNames, saveSoon, settings } from './core.js';
+import { LEAK, chatState, ctx, findScenes, formatKnowers, getFlag, hooks, revealedNames, saveSoon, sceneTranscript, settings, storyText } from './core.js';
 
 const MAX_SECRET_CHARS = 1500;
 const MAX_AUTO_RETRIES = 2;
@@ -21,7 +21,7 @@ function secretsBefore(messageId) {
         .map(scene => {
             let text = timeline[scene.id]?.summary;
             if (!text) {
-                text = scene.ids.map(id => `${chat[id].name}: ${chat[id].mes}`).join('\n');
+                text = sceneTranscript(scene, '\n');
                 if (text.length > MAX_SECRET_CHARS) text = `…${text.slice(-MAX_SECRET_CHARS)}`;
             }
             return { scene, knowers: formatKnowers(scene.members, revealedNames(scene.id, messageId)), text };
@@ -54,7 +54,7 @@ export async function checkLeak(messageId) {
     try {
         const prompt = 'SECRETS:\n'
             + secrets.map((x, i) => `#${i + 1} (known only to: ${x.knowers}): ${x.text}`).join('\n\n')
-            + `\n\nNEW REPLY (by ${message.name}):\n${text}`;
+            + `\n\nNEW REPLY (by ${message.name}):\n${storyText(message)}`;
         const verdict = parseVerdict(await llm('leak', { systemPrompt: settings().leakPrompt, prompt }));
 
         // The message may have been edited, swiped or deleted meanwhile.

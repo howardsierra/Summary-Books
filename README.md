@@ -10,8 +10,11 @@ A SillyTavern extension for keeping secrets in a story, built for **one narrator
 - **Who knows what.** A grid of every secret and every character.
 - **Private Timeline.** Saves private scenes, and optionally the public story, as summaries in the chat's lorebook, with keywords as triggers.
 - **Inline tags.** Type `@private Ana, Kael:` in a message instead of clicking.
+- **Private moments inside a message.** Wrap just part of a message in `<private with="Ana, Kael">…</private>`; the rest stays public.
+- **Scenes the model starts and ends.** Presets like CALLBOARD can have the model open and close private scenes itself, with an Undo.
 - **Prompt & budget.** See exactly what the extension adds to the model's prompt and what it costs in tokens. Set a budget for always-included memory, get warned when you go over, and trim with one click.
 - **Branch-safe.** Branches and checkpoints get their own copy of the lorebook, so they never overwrite each other's memories.
+- **Works with CALLBOARD.** Reads the story clock from its tracker card, and turns its panels and HTML into plain text for summaries and leak checks. See [CALLBOARD and other formatted presets](#callboard-and-other-formatted-presets).
 - **Story Memory.** One window with tabs for the timeline, character sheets and relationships, open threads, pinned facts, and secrets. It also tracks a story clock (time and place), merges old summaries into chapters, can hold summaries for your review, and notices when edits or deletions make a saved memory out of date.
 
 Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens, and stays fast in chats of several thousand messages. Every button is at least 40px tall on touch screens, nothing depends on hovering, and text boxes use 16px text so iPhones don't zoom in.
@@ -60,6 +63,39 @@ The extension also adds a short rules note telling the model that unlisted chara
 | `@endscene` at the start of your message | Ends the scene. The rest of that message is public |
 | The launcher's *Private scene* tile (wand menu → Private Scenes), or `/private-scene Ana, Kael` | Starts a scene |
 | `/private at=12-18 Ana, Kael` | Flags a range of messages after the fact |
+
+### Private moments inside a message
+
+Sometimes only part of a message is secret: a whisper at a party, a note passed under the table. Wrap just that part:
+
+```
+The party roars. Bob tells a terrible joke.
+
+<private with="Ana, Kael">
+Ana leans close to Kael: "I stole the royal seal."
+</private>
+
+Back inside, the band strikes up a waltz.
+```
+
+- **On screen,** the part is tinted violet and labelled with who's in on it. The tag itself doesn't show.
+- **For the model,** only that part gets the private labels. Everyone else still knows about the joke and the waltz.
+- **It's a secret like any other:** it's saved to the timeline (when auto-save is on), shows up in *Who knows what*, can be revealed, and the leak checker watches for it. Story memory leaves it out of the public story.
+- A tag that's never closed runs to the end of the message. Your saved message keeps the tag, so you can edit it like any text.
+- Each tag gets a short `id="…"` the first time it's seen. It keeps the part's secret, reveals and summary attached to it when you edit the message or add more parts.
+- **Pin a fact** from a tinted part (select the text, then 🕵️ → *Pin a fact*) and the fact is private to the same people.
+- A message that's private as a whole ignores the tags inside it.
+
+### Scenes the model starts and ends
+
+A preset can ask the model to write a line at the top of a reply:
+
+| Line | What happens |
+|---|---|
+| `SCENE> private\|Ana, Kael` | A private scene starts for Ana and Kael, and this reply is part of it |
+| `SCENE> end` | The running scene ends; this reply is public |
+
+The line is removed from the reply (and never shows, even while the reply streams), and a notice tells you what happened, with **Undo**. Swiping that reply for a new version, or deleting it, takes the scene change back too (until you send your next message): a new version without the line stays public, and a scene the model ended is running again. [CALLBOARD](https://github.com/howardsierra/callboard)'s 🤫 Private Scenes toggle teaches the model when to do this. Turn it off with **Let the model start and end private scenes** in settings; the lines are still removed.
 
 While a scene is running, a glowing bar above the chat box shows who's in it, with buttons to edit it, open the timeline, or end it.
 
@@ -193,6 +229,29 @@ Open it from the launcher (wand menu → Private Scenes → *Story memory*), the
 
 **Story clock:** set it with `@time Day 4, dawn:` and `@place the stables:` at the start of a message (these combine with the other tags), with `/story-time` and `/story-place`, or with the ✏️ in the Story Memory header. It also updates from each story summary. An optional setting checks it after every reply. The model sees `[Story time: … Location: …]` with every reply.
 
+## CALLBOARD and other formatted presets
+
+Presets like [CALLBOARD](https://github.com/howardsierra/callboard) fill replies with panels (`[[TAG]] … [[/TAG]]` data lines), HTML artifacts, image tags, cue lines and reasoning blocks. Private Scenes handles them:
+
+- **Plain text for background tasks.** Before a summary, leak check, clock check or condense, each message is tidied: CALLBOARD panels become short labelled lines (`[Tracker] time: 9:47 PM, Friday`), other HTML keeps only its text, and images, styles, scripts, HTML comments, `CUE>` lines and `<think>` blocks are left out. This saves tokens and keeps cheaper sidecar models on track. It's on by default; turn it off under **AI sidecar → Send background tasks plain text**.
+- **Story clock from the tracker.** When a reply has a CALLBOARD tracker card, its `time` and `place` lines set the story clock, with no extra generation. It's on by default under **Story clock**. If a reply has no tracker card, the clock updates the usual way.
+- **CALLBOARD's 🤫 Private Scenes toggle** tells the model to keep secrets on every panel, board and headline too, and its board shows the running scene or how many secrets the chat keeps.
+
+Your saved messages are never changed; the tidying only affects what the background tasks read.
+
+### For extension authors
+
+`window.PrivateScenes` exposes:
+
+| Call | Returns |
+|---|---|
+| `version` | The extension version |
+| `status()` | `{ enabled, scene: { members } \| null, secrets, clock: { time, place } }` for the open chat |
+| `privateTo(messageId)` | The names a message is private to, or `null` |
+| `commonKind(messageId)` | `common`, `news`, `announcement` or `rumor`, or `null` |
+| `openMemory(tab)` | Opens Story Memory: `timeline`, `characters`, `threads`, `facts` or `secrets` |
+| `tidyText(text)` | The plain text background tasks would see |
+
 ## Slash commands
 
 | Command | What it does |
@@ -224,14 +283,14 @@ All of these are under Extensions → Private Scenes. You can also open them as 
 
 At the top is a header card: an on/off switch, live counts for this chat (secrets, story entries, world knowledge, and which model the sidecar uses), and quick buttons for scenes, Story Memory, and Who knows what. Below it, each group of settings folds away and shows its current setup in one line, such as *Leak checker: On · warns you*. The panel remembers which groups you leave open.
 
-- **AI sidecar:** same model, a model you pick, or a connection profile for background tasks; which tasks use it; and the fallback.
+- **AI sidecar:** same model, a model you pick, or a connection profile for background tasks; which tasks use it; the fallback; and sending them plain text.
 - **AI prompts for background tasks:** every task's instructions, each with a reset button.
 - **Common knowledge:** condense marked messages into a short line, or use their text as is.
 - **Leak checker:** on or off, and auto-regenerate.
 - **Lorebook timeline:** auto-save secrets, keywords, hide after saving, own lorebook for branches, always-include secret entries, and the summary instructions.
 - **Story memory:** auto-summarize, every N messages, how many recent messages to leave alone, always-include, memory budget and its warning, the instructions, and chapter merging (entries per chapter, how many to keep detailed, chapter instructions).
 - **Characters & threads:** keep sheets up to date, and track threads.
-- **Story clock:** on or off, and the optional per-reply check.
+- **Story clock:** on or off, reading it from a CALLBOARD tracker card, and the optional per-reply check.
 - **Review:** *Let me review summaries before they are saved*.
 - **Prompt:** the rules text, the active-scene note, the labels, and the rules depth.
 

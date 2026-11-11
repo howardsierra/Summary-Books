@@ -74,7 +74,7 @@ async function open(contextOptions) {
 const openMobile = () => open({ ...devices['iPhone 13'] });
 
 /** Settings every suite resets, so one suite's toggles never leak into the next. */
-const BASE_SETTINGS = { enabled: true, leakCheck: false, leakAutoRegenerate: false, reviewBeforeSave: false, hideAfterSave: false, autoMemory: false, consolidate: false, autoSheets: true, worldCondense: true, showBadges: true, branchCopy: true };
+const BASE_SETTINGS = { enabled: true, aiScenes: true, autoSave: true, clockEnabled: true, clockAutoTrack: false, clockFromTracker: true, tidyText: true, leakCheck: false, leakAutoRegenerate: false, reviewBeforeSave: false, hideAfterSave: false, autoMemory: false, consolidate: false, autoSheets: true, worldCondense: true, showBadges: true, branchCopy: true };
 async function configure(page, overrides = {}) {
     await page.evaluate((s) => Object.assign(SillyTavern.getContext().extensionSettings.privateScenes, s), { ...BASE_SETTINGS, ...overrides });
 }
@@ -117,9 +117,29 @@ async function ensureCharacter(page, name = 'Narrator ' + Date.now()) {
 /** Fresh page, API, settings and character — the usual start of a suite. */
 async function start(page, overrides = {}) {
     await dismissPopups(page);
+    // Suites run on SillyTavern's own prompt unless they pick a preset themselves.
+    if (await page.evaluate(() => /^CALLBOARD/.test(SillyTavern.getContext().getPresetManager('openai').getSelectedPresetName()))) {
+        await selectPreset(page, 'Default');
+    }
     await configure(page, overrides);
     await setupApi(page);
     return ensureCharacter(page);
+}
+
+/** Selects a Chat Completion preset by name; returns the name that was selected before. */
+async function selectPreset(page, name) {
+    const errorsBefore = page.errors?.length ?? 0;
+    const previous = await page.evaluate((name) => {
+        const pm = SillyTavern.getContext().getPresetManager('openai');
+        const before = pm.getSelectedPresetName();
+        if (pm.findPreset(name) !== undefined && before !== name) pm.selectPreset(pm.findPreset(name));
+        return before;
+    }, name);
+    await page.waitForTimeout(1500);
+    await dismissPopups(page); // a preset with regex asks to allow it: yes
+    // Changing presets cancels SillyTavern's own connection check, which it reports as an AbortReason.
+    if (page.errors) page.errors.splice(errorsBefore, Infinity, ...page.errors.slice(errorsBefore).filter(e => !/AbortReason/.test(e)));
+    return previous;
 }
 
 async function dismissPopups(page) {
@@ -210,6 +230,6 @@ const smallTargets = (page, selector) => page.evaluate((sel) => [...document.que
 module.exports = {
     ST_URL, MOCK_PORT, SIDECAR_PORT, OUT, devices,
     check, eq, section, suite, summary,
-    open, openMobile, configure, setupApi, ensureCharacter, start, dismissPopups, closeAll, send, run, state, book, toasts, shot,
+    open, openMobile, configure, setupApi, ensureCharacter, start, selectPreset, dismissPopups, closeAll, send, run, state, book, toasts, shot,
     openSettings, openGroup, requests, sideRequests, kindOf, chatPrompt, smallTargets,
 };

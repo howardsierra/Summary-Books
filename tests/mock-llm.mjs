@@ -7,11 +7,31 @@ import fs from 'node:fs';
 const log = process.argv[2];
 let n = 0;
 let leakedOnce = false;
+let sceneOnce = false;
 let memoryCalls = 0;
 let sheetCalls = 0;
 function reset() {
-  n = 0; leakedOnce = false; memoryCalls = 0; sheetCalls = 0;
+  n = 0; leakedOnce = false; sceneOnce = false; memoryCalls = 0; sheetCalls = 0;
   fs.writeFileSync(log, '');
+}
+// A reply in the CALLBOARD preset's format: reasoning, a cue line, a tracker card, a panel, HTML and an image.
+const CALLBOARD_REPLY = `<think>Bob should stay clueless.</think>
+CUE> 📊|Tracker card|a new hour|
+<cb_state>
+[[TRK]]
+T> time|Day 3, 9:47 PM
+T> place|the rooftop bar
+T> mood|wired
+[[/TRK]]
+</cb_state>
+Bob orders another round and talks about the weather.
+<div class="phone"><p>Kael: you up?</p></div>
+<img data-iig-instruction='{"prompt":"Bob at the bar"}' src="user/images/bob.png">`;
+// Presets may add their own user-role prompts after the chat, so a trigger word
+// counts in any message newer than the last assistant turn.
+function asked(messages, word) {
+  const lastAssistant = messages.map(m => m.role).lastIndexOf('assistant');
+  return messages.some((m, i) => i > lastAssistant && word.test(typeof m.content === 'string' ? m.content : ''));
 }
 function reply(messages) {
   const all = JSON.stringify(messages);
@@ -37,7 +57,12 @@ function reply(messages) {
   if (/condense a rumor/.test(sys)) return 'People are whispering that Kael gambled away his family estate.';
   if (/You condense a/.test(sys)) return 'The Daily Star reports that Ana was seen leaving the palace at midnight.';
   if (/track the in-story time/.test(sys)) return 'TIME: Day 2, late night\nPLACE: the courtyard';
-  if (/LEAKME/.test(lastUser) && !leakedOnce) { leakedOnce = true; return 'Bob smirks at Ana: "So, how is the royal seal doing?"'; }
+  if (asked(messages, /CBREPLY/)) return CALLBOARD_REPLY;
+  if (asked(messages, /PARTREPLY/)) return 'The party roars. Bob tells a terrible joke.\n\n<private with="Ana, Kael">\nAna leans close to Kael: "I stole the royal seal."\n</private>\n\nBack inside, the band strikes up a waltz.';
+  if (asked(messages, /SCENESTART/)) return 'SCENE> private|Ana, Kael\nThe study door clicks shut behind them.';
+  if (asked(messages, /SCENEONCE/) && !sceneOnce) { sceneOnce = true; return 'SCENE> private|Ana, Kael\nThe study door clicks shut behind them.'; }
+  if (asked(messages, /SCENEEND/)) return 'SCENE> end\nThey slip back into the ballroom.';
+  if (asked(messages, /LEAKME/) && !leakedOnce) { leakedOnce = true; return 'Bob smirks at Ana: "So, how is the royal seal doing?"'; }
   return `Mock reply #${n}.`;
 }
 http.createServer((req, res) => {

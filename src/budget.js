@@ -38,7 +38,7 @@ export async function measure() {
     const s = settings();
     const chat = c.chat;
     const rows = [];
-    const anyPrivate = chat.some(m => getFlag(m));
+    const anyPrivate = chat.some(m => getFlag(m)) || findScenes().some(x => x.part);
     const anyCommon = chat.some(m => getCommon(m));
 
     if (s.enabled) {

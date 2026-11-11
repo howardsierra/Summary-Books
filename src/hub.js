@@ -173,11 +173,11 @@ function renderSceneCard(scene) {
     const record = chatState().timeline[scene.id];
     const [cls, icon, text] = sceneStatus(scene);
     const reveals = getReveals(scene.id);
-    const range = scene.ids.length > 1 ? `Messages ${scene.ids[0]}–${scene.ids.at(-1)}` : `Message ${scene.ids[0]}`;
+    const range = scene.part ? `Part of message ${scene.ids[0]}` : scene.ids.length > 1 ? `Messages ${scene.ids[0]}–${scene.ids.at(-1)}` : `Message ${scene.ids[0]}`;
 
     const item = timelineCard('scene', 'fa-user-secret').addClass(`ps-${cls}`);
     item.find('.ps-tl-title').text(`Secret · Scene ${scene.index}`);
-    item.find('.ps-tl-range span').text(`${range} · ${plural(scene.ids.length, 'msg')}`);
+    item.find('.ps-tl-range span').text(scene.part ? range : `${range} · ${plural(scene.ids.length, 'msg')}`);
     item.find('.ps-tl-top').append(statusPill(cls, icon, text));
     item.find('.ps-tl-members').append(chips(scene.members));
     if (reveals.length) {
@@ -197,7 +197,7 @@ function renderSceneCard(scene) {
         summary.after(keywordTags(record.keywords));
         item.find('.ps-card-meta').append(clockTags(record.clock));
     } else {
-        const preview = String(ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');
+        const preview = String(scene.part?.body ?? ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');
         summary.addClass('ps-preview').text(preview.length > 180 ? `${preview.slice(0, 180)}…` : preview);
     }
 
@@ -638,7 +638,7 @@ function renderSecrets(body) {
     const compact = window.matchMedia('(max-width: 600px), (pointer: coarse)').matches;
     const rows = scenes.map(scene => {
         const record = chatState().timeline[scene.id];
-        const about = String(record?.summary ?? ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');
+        const about = String(record?.summary ?? scene.part?.body ?? ctx().chat[scene.ids[0]]?.mes ?? '').replace(/\s+/g, ' ');
         return { scene, about, cells: names.map(name => knowledgeCell(scene, name)) };
     });
     body.append(compact ? knowledgeCards(rows) : knowledgeTable(rows, names));

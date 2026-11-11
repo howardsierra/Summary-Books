@@ -5,10 +5,11 @@
 
 import {
     COMMON_KINDS, MID, chatState, commonKind, ctx, ensureMid, flagMessages, formatTemplate, getCommon, hashText, hooks,
-    membersKey, newId, parseNames, positionOf, revealedNames, saveSoon, setCommon, settings,
+    membersKey, newId, parseNames, positionOf, revealedNames, saveSoon, setCommon, settings, storyText,
 } from './core.js';
 import { deleteEntry, getBook, upsertEntry } from './lorebook.js';
 import { parseSummary } from './extract.js';
+import { trackerClock } from './tidy.js';
 import { llm } from './llm.js';
 
 const lastId = () => Math.max(0, ctx().chat.length - 1);
@@ -195,9 +196,16 @@ export function setClock({ time, place }) {
 /** Optional per-reply tracking: asks the model where and when the story is now. */
 export async function trackClock(messageId) {
     const s = settings();
-    if (!s.enabled || !s.clockEnabled || !s.clockAutoTrack) return;
+    if (!s.enabled || !s.clockEnabled) return;
     const chat = ctx().chat;
-    const recent = chat.slice(Math.max(0, messageId - 1), messageId + 1).map(m => `${m.name}: ${m.mes}`).join('\n\n');
+    // A tracker card in the reply already says when and where: no extra generation needed.
+    const fromTracker = s.clockFromTracker ? trackerClock(chat[messageId]?.mes) : null;
+    if (fromTracker) {
+        setClock(fromTracker);
+        return;
+    }
+    if (!s.clockAutoTrack) return;
+    const recent = chat.slice(Math.max(0, messageId - 1), messageId + 1).map(m => `${m.name}: ${storyText(m)}`).join('\n\n');
     const clock = getClock();
     try {
         const answer = await llm('clock', {
@@ -436,7 +444,7 @@ async function writeWorldEntry() {
 
 /** Condenses a message into a short line for the world entry (or uses its text when condensing is off). */
 async function condense(message, kind) {
-    const text = String(message.mes ?? '').trim();
+    const text = storyText(message).trim();
     if (!settings().worldCondense) return text.length > 600 ? `${text.slice(0, 600)}…` : text;
     const label = COMMON_KINDS[kind].label.toLowerCase();
     const s = settings();

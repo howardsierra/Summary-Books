@@ -287,6 +287,25 @@
     border-radius: var(--ps-radius);
 }
 
+/* A private part inside a public message: <private with="Ana, Kael">…</private>. */
+#chat .mes_text [data-ps-part] {
+    margin: 0.6em 0;
+    padding: 6px 12px 2px;
+    background: linear-gradient(90deg, var(--ps-accent-soft), transparent 85%);
+    box-shadow: inset 3px 0 0 var(--ps-accent);
+    border-radius: var(--ps-radius);
+}
+
+#chat .mes_text [data-ps-part]::before {
+    content: "🤫 " attr(data-ps-part);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 0.78em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    opacity: 0.8;
+}
+
 .ps-badge {
     display: flex;
     flex-wrap: wrap;
