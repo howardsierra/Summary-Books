@@ -44,7 +44,11 @@ const SHEET = 'dialog[open] .ps-tile, dialog[open] .ps-action, dialog[open] .ps-
             const before = (await L.state(page)).memories.length;
             await openLauncher();
             await act(page.locator('dialog[open] .ps-tile[data-action="summarize"]'));
-            check('summarize tile saves a memory', await page.waitForFunction((n) => SillyTavern.getContext().chatMetadata.privateScenes.memories.length > n, before, { timeout: 20000 }).then(() => true, () => false));
+            await page.waitForSelector('dialog[open] .ps-summarize-sheet');
+            await page.waitForTimeout(300);
+            if (touch) { const small = await L.smallTargets(page, SHEET); check('summarize sheet: tap targets >= 40px', !small.length, small); }
+            await act(page.locator('dialog[open] .ps-action[data-action="new"]'));
+            check('summarize tile → sheet → saves a memory', await page.waitForFunction((n) => SillyTavern.getContext().chatMetadata.privateScenes.memories.length > n, before, { timeout: 20000 }).then(() => true, () => false));
 
             await openLauncher();
             await act(page.locator('dialog[open] .ps-tile[data-action="scene"]'));

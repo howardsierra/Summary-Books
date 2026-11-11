@@ -11,7 +11,7 @@ import {
     adoptScene, chatChanged, commonKind, ensureMid,
 } from './src/core.js';
 import {
-    autoSaveScene, checkBranch, hasSavedScenes, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
+    autoSaveScene, checkBranch, forceOwnBook, hasSavedScenes, rebuildAll, redoMemory, saveSecretsNow, maybeAutoMemory, maybeConsolidate, notifyStale, refreshSceneEntry, saveMemory, saveScene,
     saveStorySoFar,
 } from './src/lorebook.js';
 import {
@@ -329,6 +329,42 @@ function registerCommands() {
             const ids = parseRange(args.at);
             return await saveMemory(ids[0], ids.at(-1)) ?? '';
         },
+    });
+
+    add({
+        name: 'memory-redo',
+        helpString: 'Summarizes messages again even if they are already in story memory, replacing the story entries that overlap them. '
+            + 'Without <code>at</code>, redoes the whole chat. Example: <code>/memory-redo at=10-40</code>',
+        namedArgumentList: [atArg('Message range to summarize again, e.g. 10-40. Defaults to the whole chat.')],
+        callback: async (args) => {
+            const ids = args.at === undefined || args.at === '' ? [0, ctx().chat.length - 1] : parseRange(args.at);
+            return String(await redoMemory(ids[0], ids.at(-1)));
+        },
+    });
+
+    add({
+        name: 'secrets-save',
+        helpString: 'Saves every secret that is not saved yet or has changed, including a scene that is still running. '
+            + '<code>all=true</code> saves every secret again.',
+        namedArgumentList: [SlashCommandNamedArgument.fromProps({ name: 'all', description: 'Save every secret again', typeList: [ARGUMENT_TYPE.BOOLEAN], defaultValue: 'false' })],
+        callback: async (args) => String(await saveSecretsNow({ all: String(args.all) === 'true' })),
+    });
+
+    add({
+        name: 'memory-rebuild',
+        helpString: 'Rebuilds all memory: summarizes every secret and the whole public story again.',
+        callback: async () => {
+            await rebuildAll();
+            return '';
+        },
+    });
+
+    add({
+        name: 'private-own-book',
+        helpString: 'Gives this chat its own lorebook: a copy of the current one (leaving out messages this chat does not have), '
+            + 'or with <code>fresh=true</code> a new, empty one. Returns its name.',
+        namedArgumentList: [SlashCommandNamedArgument.fromProps({ name: 'fresh', description: 'Start empty and forget saved memories', typeList: [ARGUMENT_TYPE.BOOLEAN], defaultValue: 'false' })],
+        callback: async (args) => await forceOwnBook({ fresh: String(args.fresh) === 'true' }),
     });
 
     add({

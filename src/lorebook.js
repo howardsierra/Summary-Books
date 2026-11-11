@@ -76,6 +76,46 @@ export function checkBranch() {
     return run.then(result => result?.lists ? refreshListEntries({ world: true }) : null);
 }
 
+/**
+ * Gives this chat a lorebook of its own on demand, even if it already owns
+ * the one it uses (for a branch that claimed its parent's lorebook).
+ * fresh: start over with an empty lorebook and forget the saved memories
+ * (private and common flags on messages stay); otherwise copy the current one,
+ * minus anything from messages this chat doesn't have.
+ */
+export async function forceOwnBook({ fresh = false } = {}) {
+    if (branching) await branching;
+    const c = ctx();
+    if (!c.chatId) throw new Error('Open a chat first.');
+    const state = chatState();
+    const book = c.chatMetadata?.[BOOK_KEY];
+    const hasBook = book && c.getWorldInfoNames().includes(book);
+    const name = newBookName();
+    let pruned = { count: 0, lists: false };
+    if (fresh || !hasBook) {
+        await c.saveWorldInfo(name, { entries: {} }, true);
+        Object.assign(state, { timeline: {}, memories: [], memoryCursor: 0, drafts: [], threads: [], facts: [], world: [], sheets: {}, entries: {} });
+    } else {
+        const copy = structuredClone(await c.loadWorldInfo(book));
+        pruned = pruneFuture(state, copy, book);
+        await c.saveWorldInfo(name, copy, true);
+        repoint(state, book, name);
+    }
+    await c.updateWorldInfoList();
+    state.bookOwner = c.chatId;
+    c.chatMetadata[BOOK_KEY] = name;
+    await c.saveMetadata();
+    $('.chat_lorebook_button').addClass('world_set');
+    if (pruned.lists) await refreshListEntries({ world: true });
+    hooks.changed();
+    hooks.entriesChanged();
+    toastr.success(fresh || !hasBook
+        ? `This chat now uses a new, empty lorebook: "${name}". Messages keep their private and common marks; summarize again to fill it.`
+        : `This chat now uses its own copy: "${name}". The old lorebook is unchanged.${pruned.count ? ` Left out ${pruned.count} saved ${pruned.count === 1 ? 'memory' : 'memories'} from messages this chat doesn't have.` : ''}`,
+    'Private Scenes', { timeOut: 9000 });
+    return name;
+}
+
 async function adoptBranch() {
     const c = ctx();
     const book = c.chatMetadata?.[BOOK_KEY];
@@ -487,6 +527,114 @@ export function saveStorySoFar(options) {
     const last = ctx().chat.length - 1;
     const from = Math.min(state.memoryCursor, last);
     return saveMemory(from, last, options);
+}
+
+// ─── Forced summaries ────────────────────────────────────────────────
+
+/** Story entries (any level) that cover part of a range. */
+const overlapping = (from, to) => chatState().memories.filter(m => m.from <= to && m.to >= from);
+
+/** Grows a range until no story entry sticks out of it, so nothing is left half-covered. */
+function coverRange(from, to) {
+    for (let grown = true; grown;) {
+        grown = false;
+        for (const m of overlapping(from, to)) {
+            if (m.from < from || m.to > to) {
+                from = Math.min(from, m.from);
+                to = Math.max(to, m.to);
+                grown = true;
+            }
+        }
+    }
+    return [from, to];
+}
+
+let forcing = false;
+let progressToast = null;
+function progress(text) {
+    if (progressToast) toastr.clear(progressToast);
+    progressToast = text ? toastr.info(text, 'Private Scenes', { timeOut: 0, extendedTimeOut: 0, tapToDismiss: false }) : null;
+}
+
+/**
+ * Summarizes a stretch again even if it is already in story memory: the story
+ * entries (and chapters) overlapping it are replaced. Long stretches are split
+ * into parts of "Every N public messages", then merged into chapters as usual.
+ * @returns {Promise<number>} how many story entries were saved
+ */
+export async function redoMemory(from, to, { quiet = false } = {}) {
+    if (forcing) {
+        toastr.info('Already summarizing; wait for it to finish.', 'Private Scenes');
+        return 0;
+    }
+    const last = ctx().chat.length - 1;
+    [from, to] = coverRange(Math.max(0, from), Math.min(last, to));
+    if (to < from) return 0;
+    forcing = true;
+    const state = chatState();
+    try {
+        for (const memory of overlapping(from, to)) await removeMemory(memory.id);
+        state.drafts = state.drafts.filter(d => !(d.kind === 'memory' && d.from <= to && d.to >= from));
+        const size = Math.max(5, Number(settings().memoryEvery) || 20);
+        const ids = publicIds(from, to);
+        const parts = [];
+        for (let i = 0; i < ids.length; i += size) parts.push(ids.slice(i, i + size));
+        // A short last part joins the one before it.
+        if (parts.length > 1 && parts.at(-1).length < size / 2) parts.at(-2).push(...parts.pop());
+        let saved = 0;
+        let start = from;
+        for (const [n, part] of parts.entries()) {
+            const end = n === parts.length - 1 ? to : part.at(-1);
+            if (parts.length > 1) progress(`Summarizing part ${n + 1} of ${parts.length} (messages ${start}–${end})…`);
+            const summary = await saveMemory(start, end, { quiet: true });
+            if (!summary) break;
+            saved++;
+            start = end + 1;
+        }
+        progress(null);
+        state.memoryCursor = Math.max(state.memoryCursor, start);
+        await ctx().saveMetadata();
+        await maybeConsolidate();
+        if (!quiet && saved) toastr.success(`Summarized messages ${from}–${to} again: ${saved} story ${saved === 1 ? 'entry' : 'entries'}.`, 'Private Scenes');
+        else if (!quiet && !ids.length) toastr.info('There are no public messages in that range to summarize.', 'Private Scenes');
+        return saved;
+    } finally {
+        progress(null);
+        forcing = false;
+        hooks.changed();
+    }
+}
+
+/** Secrets that have no entry yet, or whose messages changed since. */
+export function unsavedScenes() {
+    const timeline = chatState().timeline;
+    return findScenes().filter(scene => !timeline[scene.id] || sourceStatus(timeline[scene.id]).state !== 'ok');
+}
+
+/**
+ * Saves secrets now, including a scene that is still running.
+ * @param {{all?: boolean}} options all: every secret, not only unsaved or changed ones
+ * @returns {Promise<number>} how many were saved
+ */
+export async function saveSecretsNow({ all = false, quiet = false } = {}) {
+    const scenes = all ? findScenes() : unsavedScenes();
+    let saved = 0;
+    for (const [n, scene] of scenes.entries()) {
+        if (scenes.length > 1) progress(`Saving secret ${n + 1} of ${scenes.length}…`);
+        if (await saveScene(scene, { quiet: true })) saved++;
+    }
+    progress(null);
+    if (!quiet) {
+        toastr[saved ? 'success' : 'info'](saved ? `Saved ${saved} ${saved === 1 ? 'secret' : 'secrets'} to the lorebook.` : 'No secrets needed saving.', 'Private Scenes');
+    }
+    return saved;
+}
+
+/** Rebuilds all memory: every secret and the whole public story, from the first message. */
+export async function rebuildAll() {
+    const secrets = await saveSecretsNow({ all: true, quiet: true });
+    const entries = await redoMemory(0, ctx().chat.length - 1, { quiet: true });
+    toastr.success(`Rebuilt memory: ${secrets} ${secrets === 1 ? 'secret' : 'secrets'} and ${entries} story ${entries === 1 ? 'entry' : 'entries'}.`, 'Private Scenes');
 }
 
 let autoMemoryRunning = false;

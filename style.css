@@ -3092,3 +3092,20 @@ dialog.popup.ps-sheet-dialog {
     .ps-budget-input input.text_pole { font-size: 16px; min-height: 40px; }
 }
 .ps-budget .ps-tab { flex: 1; justify-content: center; }
+
+/* ── 20. Summarize sheet ─────────────────────────────────────────── */
+
+.ps-sheet-section {
+    margin: 14px 4px 6px;
+    color: var(--ps-muted);
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ps-summarize-sheet { display: flex; flex-direction: column; gap: 10px; }
+.ps-row-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ps-row-buttons .ps-btn { white-space: normal; text-align: left; }

@@ -35,6 +35,7 @@ throwaway install.
 | sidecar-profile | AI sidecar through a connection profile, per-task switches, fallback |
 | sidecar-model | AI sidecar as another model from the same provider |
 | branches | a branch gets its own copy of the lorebook |
+| force | redo a range, save secrets now, rebuild, own lorebook on demand |
 | budget | prompt preview and memory budget |
 | touch | everything by tap on a phone, 40px tap targets |
 | windows | settings and Story Memory windows on desktop, iPad, iPhone |

@@ -6,7 +6,7 @@ import {
     formatMembers, getCommon, getFlag, getMembers, getScene, nameHue, parseNames, revealedNames, setRevealedNames,
     settings, startScene,
 } from './core.js';
-import { refreshSceneEntry, saveMemory, saveStorySoFar, staleItems } from './lorebook.js';
+import { forceOwnBook, rebuildAll, redoMemory, refreshSceneEntry, saveMemory, saveSecretsNow, saveStorySoFar, staleItems, unsavedScenes } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
 import { addFact, getClock, setVisibility, sheetList } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
@@ -16,7 +16,7 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.9.0';
+const EXTENSION_VERSION = '0.10.0';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 import { lastMeasure, openBudget } from './budget.js';
 
@@ -550,6 +550,7 @@ function addSettingsPanel() {
                         <label class="checkbox_label"><input id="ps_keywords" type="checkbox"> <span>Ask for keywords (places, objects, events) as extra triggers</span></label>
                         <label class="checkbox_label"><input id="ps_hide_after_save" type="checkbox"> <span>Hide the original messages after saving</span></label>
                         <label class="checkbox_label"><input id="ps_branch_copy" type="checkbox"> <span>Branches and checkpoints get their own copy of the lorebook</span></label>
+                        <div class="ps-row-buttons"><div id="ps_open_summarize" class="menu_button menu_button_icon ps-btn" role="button" tabindex="0"><i class="fa-solid fa-scroll" aria-hidden="true"></i><span>Summarize now, redo, or give this chat its own lorebook…</span></div></div>
                         <label class="checkbox_label"><input id="ps_entry_constant" type="checkbox"> <span>Always include secret entries (otherwise when triggered)</span></label>
                     </div>
 
@@ -712,6 +713,7 @@ function addSettingsPanel() {
     $('#ps_open_timeline').on('click', () => openMemory('timeline'));
     $('#ps_open_grid').on('click', () => openMemory('secrets'));
     $('#ps_clock_edit').on('click', editClock);
+    $('#ps_open_summarize').on('click', openSummarizeSheet);
 }
 
 export function initUi() {
@@ -1172,7 +1174,7 @@ export async function openLauncher() {
         tile('scene', 'fa-masks-theater', scene ? 'Private scene' : 'Start a private scene',
             scene ? `With ${formatMembers(scene.members)} · edit or end` : 'Only the characters you pick see it', { tone: scene ? 'live' : '' }),
         tile('memory', 'fa-book-open', 'Story memory', `${count(state.memories.length, 'entry', 'entries')} · ${count(secrets, 'secret')}`, { badge: attention }),
-        tile('summarize', 'fa-scroll', 'Summarize', pending ? `${count(pending, 'new message')} to save` : 'Up to date', { tone: 'story', disabled: !pending }),
+        tile('summarize', 'fa-scroll', 'Summarize', pending ? `${count(pending, 'new message')} to save` : 'Up to date · redo or rebuild', { tone: 'story' }),
         tile('secrets', 'fa-table-cells', 'Who knows what', secrets ? count(secrets, 'secret') : 'No secrets yet'),
         tile('characters', 'fa-users', 'Characters', count(sheetList().length, 'sheet')),
         tile('threads', 'fa-list-check', 'Threads & facts', `${count(openThreads, 'open thread')} · ${count(state.facts.length + state.world.length, 'fact')}`, { tone: 'world' }),
@@ -1187,7 +1189,7 @@ export async function openLauncher() {
     const actions = {
         scene: onSceneButtonClick,
         memory: () => openMemory('timeline'),
-        summarize: () => saveStorySoFar(),
+        summarize: openSummarizeSheet,
         secrets: () => openMemory('secrets'),
         characters: () => openMemory('characters'),
         threads: () => openMemory('threads'),
@@ -1212,6 +1214,7 @@ async function openMessageSheet(id, selected) {
     const message = ctx().chat[id];
     const state = chatState();
     const from = Math.min(state.memoryCursor, id);
+    const covering = state.memories.find(m => m.from <= id && m.to >= id);
     const alreadySaved = id < state.memoryCursor;
     const tone = getCommon(message) ? 'world' : getMembers(message) ? '' : 'ok';
 
@@ -1220,12 +1223,74 @@ async function openMessageSheet(id, selected) {
     content.append(
         actionRow('visibility', getCommon(message) ? 'fa-earth-americas' : getMembers(message) ? 'fa-user-secret' : 'fa-users', 'Who knows about this?', visibilityLabel(message), { tone }),
         actionRow('pin', 'fa-thumbtack', 'Pin a fact', selected ? `“${selected.slice(0, 60)}${selected.length > 60 ? '…' : ''}”` : 'Something from this message the story must remember'),
-        actionRow('summarize', 'fa-scroll', 'Summarize the story up to here',
-            alreadySaved ? 'Already in story memory' : `Messages ${from}–${id}, public parts only`, { tone: 'story', disabled: alreadySaved }),
+        alreadySaved
+            ? actionRow('resummarize', 'fa-rotate', 'Summarize this part again', covering
+                ? `Replaces the story entry for messages ${covering.from}–${covering.to}` : `Messages ${id}–${id}, public parts only`, { tone: 'story' })
+            : actionRow('summarize', 'fa-scroll', 'Summarize the story up to here', `Messages ${from}–${id}, public parts only`, { tone: 'story' }),
     );
 
     const chosen = await openSheet(content, 'ps-message-sheet-dialog');
     if (chosen === 'visibility') await chooseVisibility(id);
     if (chosen === 'pin') await pinFromMessage(id, selected);
     if (chosen === 'summarize') await saveMemory(from, id);
+    if (chosen === 'resummarize') await redoMemory(covering?.from ?? id, covering?.to ?? id);
+}
+
+/** Asks for a message range like "10-40"; null when cancelled. */
+async function askRange(title, value) {
+    const c = ctx();
+    const text = await c.callGenericPopup(title, c.POPUP_TYPE.INPUT, value);
+    if (text === null || text === undefined || text === false || !String(text).trim()) return null;
+    const match = String(text).trim().match(/^(\d+)\s*(?:[-–]\s*(\d+))?$/);
+    if (!match) {
+        toastr.warning('Type a message number or a range like 10-40.', 'Private Scenes');
+        return null;
+    }
+    const a = Number(match[1]);
+    const b = match[2] === undefined ? a : Number(match[2]);
+    return [Math.min(a, b), Math.max(a, b)];
+}
+
+/** Summarize sheet: what's new, secrets now, redo a range, rebuild, and this chat's lorebook. */
+export async function openSummarizeSheet() {
+    const c = ctx();
+    const state = chatState();
+    const last = c.chat.length - 1;
+    const pending = Math.max(0, c.chat.length - state.memoryCursor);
+    const unsaved = unsavedScenes();
+    const running = getScene();
+    const book = c.chatMetadata?.world_info;
+
+    const content = $('<div class="ps-summarize-sheet"></div>');
+    content.append(sheetHeader('fa-scroll', 'Summarize', 'Save to the lorebook now, or redo what is already there.'));
+    content.append(
+        actionRow('new', 'fa-scroll', 'Summarize the new story', pending ? `Messages ${state.memoryCursor}–${last}, public parts only` : 'Nothing new since the last summary',
+            { tone: 'story', disabled: !pending }),
+        actionRow('secrets', 'fa-user-secret', 'Save secrets now', unsaved.length
+            ? `${count(unsaved.length, 'secret')} not saved or changed${running ? ', including the running scene' : ''}`
+            : 'Every secret is saved', { disabled: !unsaved.length }),
+        actionRow('redo', 'fa-rotate', 'Summarize messages again…', 'Pick a range; its story entries are replaced', { tone: 'story', disabled: last < 0 }),
+        actionRow('rebuild', 'fa-hammer', 'Rebuild all memory', 'Every secret and the whole story, from the first message', { tone: 'warn', disabled: last < 0 }),
+    );
+    content.append($('<div class="ps-sheet-section"></div>').text(book ? `Lorebook: ${book}` : 'Lorebook: none yet'));
+    content.append(
+        actionRow('own-copy', 'fa-code-branch', 'Give this chat its own copy', book
+            ? 'For a branch: copies the lorebook, leaving out messages this chat doesn\'t have' : 'Creates one when you first save', { tone: 'world', disabled: !book }),
+        actionRow('own-fresh', 'fa-file-circle-plus', 'Start a new, empty lorebook', 'Forgets saved memories; private and common marks stay', { tone: 'warn' }),
+    );
+
+    const chosen = await openSheet(content, 'ps-summarize-sheet-dialog');
+    if (chosen === 'new') await saveStorySoFar();
+    if (chosen === 'secrets') await saveSecretsNow();
+    if (chosen === 'redo') {
+        const range = await askRange('Summarize which messages again? Story entries overlapping them are replaced.', `0-${last}`);
+        if (range) await redoMemory(range[0], range[1]);
+    }
+    if (chosen === 'rebuild' && await confirm('Rebuild all memory? Every secret and the whole public story are summarized again, which can take many requests in a long chat. Existing story entries are replaced.')) {
+        await rebuildAll();
+    }
+    if (chosen === 'own-copy') await forceOwnBook().catch(error => toastr.error(String(error?.message ?? error), 'Private Scenes'));
+    if (chosen === 'own-fresh' && await confirm('Start a new, empty lorebook for this chat? Saved secrets, story entries, threads, pins, sheets and world knowledge are forgotten here (the old lorebook itself is kept). Messages stay private or common.')) {
+        await forceOwnBook({ fresh: true }).catch(error => toastr.error(String(error?.message ?? error), 'Private Scenes'));
+    }
 }

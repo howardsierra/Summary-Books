@@ -21,7 +21,7 @@ Tested with SillyTavern 1.19.0 on desktop and on phone-sized touch screens, and 
 - **Wand menu → Private Scenes** opens a small launcher. Each tile shows its live status and takes you there:
   - **Private scene**: start one, or edit or end the one that's running.
   - **Story memory**
-  - **Summarize**: saves the story so far.
+  - **Summarize**: opens the summarize sheet (see *Forcing a summary* below).
   - **Who knows what**
   - **Characters**
   - **Threads & facts**
@@ -147,6 +147,24 @@ Turn on **Hide the original messages after saving** to keep the context small. T
 
 **Branches and checkpoints.** SillyTavern copies a chat's settings into a branch or checkpoint, so both would share one lorebook and overwrite each other's entries. Instead, the chat that created the lorebook owns it. When you open a branch or checkpoint, it gets its own copy, and the copy leaves out the secrets, story entries, pins, threads, world knowledge and reveals from after the branch point. You get a short notice when this happens. Character sheets keep their latest state. Turn off *Branches and checkpoints get their own copy of the lorebook* to share one lorebook instead.
 
+## Forcing a summary
+
+The launcher's **Summarize** tile always opens a sheet, even when everything is up to date:
+
+- **Summarize the new story:** everything since the last story entry, including the newest messages that automatic summaries leave alone.
+- **Save secrets now:** every secret that has no entry yet or whose messages changed, *including a scene that is still running*. The scene keeps running.
+- **Summarize messages again…:** pick a range such as `10-40`. The story entries (and chapters) overlapping it are replaced; a range that only touches part of an entry is widened to the whole entry, so nothing is left half-covered. Long ranges are split into parts of *Every N public messages*, then merged into chapters as usual.
+- **Rebuild all memory:** every secret and the whole public story again, from the first message. This can take many requests in a long chat, so it asks first.
+
+On a message that's already in story memory, the 🕵️ sheet offers **Summarize this part again**, which redoes the story entry containing it.
+
+**This chat's lorebook.** The same sheet shows which lorebook the chat uses, with two buttons:
+
+- **Give this chat its own copy:** copies the current lorebook and switches this chat to the copy, leaving out anything from messages this chat doesn't have. Use it when a branch didn't get its own copy automatically (an older branch, one made with the setting off, or one opened before its parent). The old lorebook is left as it is.
+- **Start a new, empty lorebook:** switches this chat to a blank lorebook and forgets its saved secrets, story entries, threads, pins, sheets and world knowledge. Messages stay private or common, so *Rebuild all memory* can fill it again. It asks first, and the old lorebook is kept.
+
+Settings → Lorebook timeline has a button for this sheet too.
+
 ## Prompt & budget
 
 Open it from the launcher (wand menu → Private Scenes → **Prompt & budget**) or with `/private-prompt`.
@@ -186,6 +204,10 @@ Open it from the launcher (wand menu → Private Scenes → *Story memory*), the
 | `/private-reveal Bob` | Bob finds out the latest secret. `at=14` picks the secret containing message 14 |
 | `/private-save` | Summarizes the latest secret into the lorebook. `at=14` picks one |
 | `/memory-save` | Summarizes the public story since the last memory. `at=0-40` sets the range |
+| `/memory-redo at=10-40` | Summarizes messages again, replacing the story entries there. Without `at`, the whole chat |
+| `/secrets-save` | Saves secrets that aren't saved or have changed, including a running scene. `all=true` saves every one again |
+| `/memory-rebuild` | Summarizes every secret and the whole story again |
+| `/private-own-book` | Gives this chat its own copy of the lorebook. `fresh=true` starts a new, empty one |
 | `/memory` | Opens Story Memory. Add a tab name to open it there: `/memory threads` |
 | `/who-knows` | Opens the Secrets tab |
 | `/private-settings` | Opens the settings as a window |
