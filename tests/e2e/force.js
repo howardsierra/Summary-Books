@@ -97,6 +97,23 @@ L.suite('force', async (page) => {
     check('every secret summarized again', L.requests().filter(r => L.kindOf(r) === 'secret-summary').length > secretsBefore);
     check('story rebuilt from message 0', (await mems(page))[0]?.startsWith('L0 0-'), await mems(page));
 
+    section('a lorebook linked by hand counts as empty');
+    const handBook = 'Linked by hand ' + Date.now();
+    await page.evaluate(async (b) => { const c = SillyTavern.getContext(); await c.saveWorldInfo(b, { entries: {} }, true); await c.updateWorldInfoList(); c.chatMetadata.world_info = b; await c.saveMetadata(); }, handBook);
+    await openSummarize(page);
+    const everything = await page.locator('dialog[open] .ps-action[data-action="everything"]');
+    check('"Summarize everything new" is offered', !(await everything.getAttribute('class')).includes('disabled'), await everything.innerText());
+    const oldEntriesKept = await page.evaluate(async () => { const c = SillyTavern.getContext(); const s = c.chatMetadata.privateScenes; return s.memories[0]?.book; });
+    await page.evaluate(() => toastr.remove());
+    await everything.click();
+    await page.waitForFunction(() => [...document.querySelectorAll('#toast-container .toast-success')].some(t => /Saved \d+ secrets? and \d+ story/.test(t.innerText)), null, { timeout: 60000 });
+    await page.waitForTimeout(500);
+    const handBooks = await page.evaluate(() => { const set = new Set(); JSON.stringify(SillyTavern.getContext().chatMetadata.privateScenes, (k, v) => { if (k === 'book' && v) set.add(v); return v; }); return [...set]; });
+    eq('every record now points at the new lorebook', handBooks, [handBook]);
+    const filled = (await L.book(page)).map(e => e.comment);
+    check('the new lorebook gets the secrets and the story', filled.some(c => /Private/.test(c)) && filled.some(c => /Story|Chapter/.test(c)), filled);
+    check('the old lorebook keeps its entries', (await page.evaluate(async (b) => Object.keys((await SillyTavern.getContext().loadWorldInfo(b))?.entries ?? {}).length, oldEntriesKept)) > 0);
+
     section('own copy of the lorebook');
     const oldBook = await page.evaluate(() => SillyTavern.getContext().chatMetadata.world_info);
     const oldEntries = (await L.book(page)).map(e => e.comment).sort();

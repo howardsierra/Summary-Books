@@ -187,7 +187,7 @@ Turn on **Hide the original messages after saving** to keep the context small. T
 
 The launcher's **Summarize** tile always opens a sheet, even when everything is up to date:
 
-- **Summarize everything new:** both of the next two in one tap: every secret that isn't saved or has changed, then the story since the last summary (split into parts if it's long). `/memory-all` does the same.
+- **Summarize everything new:** both of the next two in one tap. Anything whose entry is in a different lorebook than the one the chat uses now (you linked another lorebook, or deleted the old one) counts as not saved, so this also fills a new lorebook, pins, threads, world knowledge and sheets included. The old lorebook's entries are left alone. It saves every secret that isn't saved or has changed, then the story since the last summary (split into parts if it's long). `/memory-all` does the same.
 - **Summarize the new story:** everything since the last story entry, including the newest messages that automatic summaries leave alone.
 - **Save secrets now:** every secret that has no entry yet or whose messages changed, *including a scene that is still running*. The scene keeps running.
 - **Summarize messages again…:** pick a range such as `10-40`. The story entries (and chapters) overlapping it are replaced; a range that only touches part of an entry is widened to the whole entry, so nothing is left half-covered. Long ranges are split into parts of *Every N public messages*, then merged into chapters as usual.

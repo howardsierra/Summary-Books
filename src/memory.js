@@ -325,6 +325,27 @@ async function applySheet(block, at, { replaceRels = false } = {}) {
     await writeSheetEntry(sheet);
 }
 
+/**
+ * Rewrites pins, threads, world knowledge and character sheets whose entry is
+ * in another lorebook than the chat's current one. Returns how many moved.
+ */
+export async function rewriteForeignEntries(currentBook) {
+    const state = chatState();
+    let moved = 0;
+    const foreign = (record) => record && record.book !== currentBook;
+    if (foreign(state.entries.facts)) { await saveList(writeFactsEntry); moved++; }
+    if (foreign(state.entries.threads)) { await saveList(writeThreadsEntry); moved++; }
+    if (foreign(state.entries.world)) { await saveList(writeWorldEntry); moved++; }
+    for (const sheet of Object.values(state.sheets)) {
+        if (sheet.book && sheet.book !== currentBook) {
+            await writeSheetEntry(sheet);
+            moved++;
+        }
+    }
+    if (moved) await ctx().saveMetadata();
+    return moved;
+}
+
 export const sheetsBusy = new Set();
 
 /**

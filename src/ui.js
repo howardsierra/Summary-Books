@@ -6,7 +6,7 @@ import {
     formatMembers, getCommon, getFlag, getMembers, getScene, messageParts, nameHue, parseNames, partId, revealedNames,
     setRevealedNames, settings, startScene,
 } from './core.js';
-import { forceOwnBook, rebuildAll, saveEverythingNew, redoMemory, refreshSceneEntry, saveMemory, saveSecretsNow, saveStorySoFar, staleItems, unsavedScenes } from './lorebook.js';
+import { forceOwnBook, rebuildAll, saveEverythingNew, storyStart, redoMemory, refreshSceneEntry, saveMemory, saveSecretsNow, saveStorySoFar, staleItems, unsavedScenes } from './lorebook.js';
 import { joinSummary, parseSummary } from './extract.js';
 import { addFact, getClock, setVisibility, sheetList } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
@@ -16,7 +16,7 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.12.1';
+const EXTENSION_VERSION = '0.12.2';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 import { lastMeasure, openBudget } from './budget.js';
 
@@ -1205,7 +1205,7 @@ export async function openLauncher() {
     const state = chatState();
     const scene = getScene();
     const secrets = findScenes().length;
-    const pending = Math.max(0, ctx().chat.length - state.memoryCursor);
+    const pending = Math.max(0, ctx().chat.length - storyStart());
     const attention = state.drafts.length + staleItems().length;
     const openThreads = state.threads.filter(t => t.status === 'open').length;
 
@@ -1301,7 +1301,8 @@ export async function openSummarizeSheet() {
     const c = ctx();
     const state = chatState();
     const last = c.chat.length - 1;
-    const pending = Math.max(0, c.chat.length - state.memoryCursor);
+    const start = storyStart();
+    const pending = Math.max(0, c.chat.length - start);
     const unsaved = unsavedScenes();
     const running = getScene();
     const book = c.chatMetadata?.world_info;
@@ -1310,9 +1311,9 @@ export async function openSummarizeSheet() {
     content.append(sheetHeader('fa-scroll', 'Summarize', 'Save to the lorebook now, or redo what is already there.'));
     content.append(
         actionRow('everything', 'fa-wand-magic-sparkles', 'Summarize everything new',
-            pending || unsaved.length ? [pending ? `messages ${state.memoryCursor}–${last}` : null, unsaved.length ? count(unsaved.length, 'secret') : null].filter(Boolean).join(' + ')
+            pending || unsaved.length ? [pending ? `messages ${start}–${last}` : null, unsaved.length ? count(unsaved.length, 'secret') : null].filter(Boolean).join(' + ')
                 : 'Everything is already saved', { tone: 'story', disabled: !pending && !unsaved.length }),
-        actionRow('new', 'fa-scroll', 'Summarize the new story', pending ? `Messages ${state.memoryCursor}–${last}, public parts only` : 'Nothing new since the last summary',
+        actionRow('new', 'fa-scroll', 'Summarize the new story', pending ? `Messages ${start}–${last}, public parts only` : 'Nothing new since the last summary',
             { tone: 'story', disabled: !pending }),
         actionRow('secrets', 'fa-user-secret', 'Save secrets now', unsaved.length
             ? `${count(unsaved.length, 'secret')} not saved or changed${running ? ', including the running scene' : ''}`
@@ -1329,7 +1330,7 @@ export async function openSummarizeSheet() {
 
     const chosen = await openSheet(content, 'ps-summarize-sheet-dialog');
     if (chosen === 'everything') await saveEverythingNew();
-    if (chosen === 'new') await saveStorySoFar();
+    if (chosen === 'new') await redoMemory(start, last);
     if (chosen === 'secrets') await saveSecretsNow();
     if (chosen === 'redo') {
         const range = await askRange('Summarize which messages again? Story entries overlapping them are replaced.', `0-${last}`);

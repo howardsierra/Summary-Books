@@ -8,7 +8,7 @@ import {
     newId, parseNames, positionOf, revealedNames, sceneTranscript, settings, sourceStatus, sourcesOf, storyText,
 } from './core.js';
 import { extrasInstructions, parseSummary } from './extract.js';
-import { applyExtras, getClock, refreshListEntries, updateSheets, visibleThreads } from './memory.js';
+import { applyExtras, getClock, refreshListEntries, rewriteForeignEntries, updateSheets, visibleThreads } from './memory.js';
 import { llm } from './llm.js';
 
 // world_info_position.after (after character definitions)
@@ -532,6 +532,26 @@ export function saveStorySoFar(options) {
 
 // ─── Forced summaries ────────────────────────────────────────────────
 
+/** The chat's lorebook, if it exists. */
+function currentBook() {
+    const c = ctx();
+    const book = c.chatMetadata?.[BOOK_KEY];
+    return book && c.getWorldInfoNames().includes(book) ? book : null;
+}
+/**
+ * Whether a saved record's entry is in the lorebook the chat uses now. A record
+ * whose entry is elsewhere (you linked another lorebook, or deleted this one)
+ * counts as not saved.
+ */
+const inCurrentBook = (record) => !!record?.book && record.book === currentBook();
+
+/** Where the story still needs summarizing: the cursor, or earlier if an entry lives in another lorebook. */
+export function storyStart() {
+    const state = chatState();
+    const foreign = state.memories.filter(m => !inCurrentBook(m)).map(m => m.from);
+    return Math.max(0, Math.min(state.memoryCursor, ...foreign));
+}
+
 /** Story entries (any level) that cover part of a range. */
 const overlapping = (from, to) => chatState().memories.filter(m => m.from <= to && m.to >= from);
 
@@ -574,7 +594,12 @@ export async function redoMemory(from, to, { quiet = false } = {}) {
     forcing = true;
     const state = chatState();
     try {
-        for (const memory of overlapping(from, to)) await removeMemory(memory.id);
+        progress(`Summarizing messages ${from}–${to}…`);
+        for (const memory of overlapping(from, to)) {
+            // An entry in another lorebook stays there: that book may belong to another chat.
+            if (inCurrentBook(memory)) await removeMemory(memory.id);
+            else state.memories = state.memories.filter(m => m !== memory);
+        }
         state.drafts = state.drafts.filter(d => !(d.kind === 'memory' && d.from <= to && d.to >= from));
         const size = Math.max(5, Number(settings().memoryEvery) || 20);
         const ids = publicIds(from, to);
@@ -609,7 +634,7 @@ export async function redoMemory(from, to, { quiet = false } = {}) {
 /** Secrets that have no entry yet, or whose messages changed since. */
 export function unsavedScenes() {
     const timeline = chatState().timeline;
-    return findScenes().filter(scene => !timeline[scene.id] || sourceStatus(timeline[scene.id]).state !== 'ok');
+    return findScenes().filter(scene => !timeline[scene.id] || !inCurrentBook(timeline[scene.id]) || sourceStatus(timeline[scene.id]).state !== 'ok');
 }
 
 /**
@@ -621,7 +646,7 @@ export async function saveSecretsNow({ all = false, quiet = false } = {}) {
     const scenes = all ? findScenes() : unsavedScenes();
     let saved = 0;
     for (const [n, scene] of scenes.entries()) {
-        if (scenes.length > 1) progress(`Saving secret ${n + 1} of ${scenes.length}…`);
+        progress(scenes.length > 1 ? `Saving secret ${n + 1} of ${scenes.length}…` : 'Saving a secret…');
         if (await saveScene(scene, { quiet: true })) saved++;
     }
     progress(null);
@@ -634,10 +659,12 @@ export async function saveSecretsNow({ all = false, quiet = false } = {}) {
 /** Catches up: saves every unsaved or changed secret, then the story since the last summary. */
 export async function saveEverythingNew() {
     const secrets = await saveSecretsNow({ quiet: true });
-    const state = chatState();
     const last = ctx().chat.length - 1;
-    const story = state.memoryCursor <= last && publicIds(state.memoryCursor, last).length
-        ? await redoMemory(state.memoryCursor, last, { quiet: true }) : 0;
+    const start = storyStart();
+    const story = start <= last && publicIds(start, last).length
+        ? await redoMemory(start, last, { quiet: true }) : 0;
+    // Pins, threads, world knowledge and sheets left in another lorebook come along too.
+    if (secrets || story || currentBook()) await rewriteForeignEntries(await getBook(true));
     toastr[secrets || story ? 'success' : 'info'](secrets || story
         ? `Saved ${secrets} ${secrets === 1 ? 'secret' : 'secrets'} and ${story} story ${story === 1 ? 'entry' : 'entries'}.`
         : 'Everything is already saved.', 'Private Scenes');
