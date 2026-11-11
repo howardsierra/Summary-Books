@@ -61,7 +61,8 @@ const SHEET = 'dialog[open] .ps-tile, dialog[open] .ps-action, dialog[open] .ps-
             await act(page.locator('#chat .mes[mesid="1"] .ps_toggle'));
             await page.waitForSelector('dialog[open] .ps-message-sheet');
             await page.waitForTimeout(400);
-            check('has visibility, pin and summarize rows', (await Promise.all(['visibility', 'pin', 'summarize'].map(a => page.locator(`dialog[open] .ps-action[data-action="${a}"]`).count()))).every(n => n === 1));
+            // Message 1 was just summarized above, so its sheet offers "summarize again".
+            check('has visibility, pin and summarize-again rows', (await Promise.all(['visibility', 'pin', 'resummarize'].map(a => page.locator(`dialog[open] .ps-action[data-action="${a}"]`).count()))).every(n => n === 1));
             if (touch) { const small = await L.smallTargets(page, SHEET); check('tap targets >= 40px', !small.length, small); }
             await act(page.locator('dialog[open] .ps-action[data-action="pin"]'));
             const pin = page.locator('dialog[open] textarea.popup-input').last();
