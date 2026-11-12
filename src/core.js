@@ -31,7 +31,9 @@ export const defaultSettings = Object.freeze({
     // AI sidecar: a connection profile (usually a cheaper model) for background tasks.
     sidecarMode: 'main',
     sidecarModel: '',
+    // '' = the roleplay's provider; otherwise a Chat Completion source such as 'openrouter'.
     sidecarSource: '',
+    sidecarCustomUrl: '',
     sidecarProfile: '',
     sidecarTasks: { summary: true, leak: true, sheets: true, condense: true, clock: true },
     sidecarFallback: true,

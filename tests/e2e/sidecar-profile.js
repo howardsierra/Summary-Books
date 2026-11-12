@@ -16,6 +16,8 @@ L.suite('sidecar-profile', async (page) => {
     section('pick the profile in settings');
     await L.openSettings(page);
     await L.openGroup(page, 'sidecar');
+    // The pills show the settings from page load: start from a different one.
+    await page.locator('.ps-sidecar-mode:has-text(\"Same as the roleplay\")').click();
     await page.locator('.ps-sidecar-mode:has-text("Connection profile")').click();
     await page.waitForTimeout(200);
     check('profile is offered', (await page.locator('#ps_sidecar_profile option').allTextContents()).some(t => /Cheap sidecar/.test(t)));

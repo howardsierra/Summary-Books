@@ -3128,3 +3128,17 @@ dialog.popup.ps-sheet-dialog {
 .ps-summarize-sheet { display: flex; flex-direction: column; gap: 10px; }
 .ps-row-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .ps-row-buttons .ps-btn { white-space: normal; text-align: left; }
+
+/* Sidecar: provider, endpoint and model row */
+.ps-sidecar-model-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.ps-sidecar-model-row select { flex: 1; min-width: 0; margin: 0; }
+.ps-sidecar-model-row .ps-btn { flex: none; margin: 0; }
+.ps-sidecar-custom { display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 420px) {
+    .ps-sidecar-model-row { flex-wrap: wrap; }
+    .ps-sidecar-model-row .ps-btn { width: 100%; justify-content: center; }
+}

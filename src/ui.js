@@ -11,12 +11,12 @@ import { joinSummary, parseSummary } from './extract.js';
 import { addFact, getClock, setVisibility, sheetList } from './memory.js';
 import { checking, currentLeak, dismissLeak, regenerate } from './leaks.js';
 import {
-    TASKS, currentSource, modelSidecarProblem, providerModels, sidecarProfiles, sourceName, testSidecar,
+    TASKS, allProviders, currentSource, fetchProviderModels, modelSidecarProblem, providerModels, sidecarProfiles, sidecarProvider, sourceName, testSidecar,
 } from './llm.js';
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.12.2';
+const EXTENSION_VERSION = '0.13.0';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 import { lastMeasure, openBudget } from './budget.js';
 
@@ -525,9 +525,18 @@ function addSettingsPanel() {
                         <div id="ps_sidecar_modes" class="ps-sidecar-modes" role="radiogroup" aria-label="Model for background tasks"></div>
 
                         <div class="ps-sidecar-panel" data-mode="model">
-                            <div class="ps-sidecar-provider"><i class="fa-solid fa-plug"></i><span id="ps_sidecar_provider"></span></div>
+                            <label for="ps_sidecar_source">Provider</label>
+                            <select id="ps_sidecar_source" class="text_pole"></select>
+                            <div class="ps-sidecar-provider"><i class="fa-solid fa-key"></i><span id="ps_sidecar_provider"></span></div>
+                            <div class="ps-sidecar-custom">
+                                <label for="ps_sidecar_custom_url">Endpoint URL <small>(OpenAI-compatible, e.g. http://localhost:5001/v1)</small></label>
+                                <input id="ps_sidecar_custom_url" class="text_pole" type="url" autocomplete="off" spellcheck="false">
+                            </div>
                             <label for="ps_sidecar_model_list">Model</label>
-                            <select id="ps_sidecar_model_list" class="text_pole"></select>
+                            <div class="ps-sidecar-model-row">
+                                <select id="ps_sidecar_model_list" class="text_pole"></select>
+                                <div id="ps_sidecar_load" class="menu_button menu_button_icon ps-btn" role="button" tabindex="0" title="Ask the provider for its models, using your saved key"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>Load models</span></div>
+                            </div>
                             <label for="ps_sidecar_model">Model ID <small>(pick above, or type any model your provider offers)</small></label>
                             <input id="ps_sidecar_model" class="text_pole" type="text" autocomplete="off" spellcheck="false" placeholder="e.g. claude-haiku-5-5">
                             <small id="ps_sidecar_model_hint"></small>
@@ -792,7 +801,7 @@ const onOff = (value) => value ? 'On' : 'Off';
 /** One-line summaries shown on each closed group, so the setup is readable at a glance. */
 const GROUP_SUMMARIES = {
     messages: (s) => `Badges ${onOff(s.showBadges).toLowerCase()} · @tags ${onOff(s.inlineTags).toLowerCase()} · AI scenes ${onOff(s.aiScenes).toLowerCase()}`,
-    sidecar: (s) => s.sidecarMode === 'model' && s.sidecarModel ? `${s.sidecarModel}${modelSidecarProblem() ? ' · needs attention' : ` via ${sourceName()}`}`
+    sidecar: (s) => s.sidecarMode === 'model' && s.sidecarModel ? `${s.sidecarModel}${modelSidecarProblem() ? ' · needs attention' : ` via ${sourceName(sidecarProvider())}`}`
         : s.sidecarMode === 'profile' && s.sidecarProfile ? `Profile: ${sidecarProfiles()?.find(p => p.id === s.sidecarProfile)?.name ?? 'missing'}`
             : 'Same model as the roleplay',
     clock: (s) => {
@@ -951,16 +960,31 @@ function fillSidecarProfiles() {
             : 'Profiles can use any provider or a local model, separate from your roleplay connection.');
 }
 
-/** Fills the model dropdown from the provider your roleplay is connected to. */
+/** Model lists loaded from providers with "Load models", per provider. */
+const loadedModels = new Map();
+
+/** Fills the provider and model dropdowns for the sidecar's provider. */
 function fillSidecarModels() {
     const s = settings();
-    const source = currentSource();
-    const models = providerModels(source);
-    const mainModel = source ? ctx().getChatCompletionModel?.() : '';
+    const current = currentSource();
+    const source = sidecarProvider();
+    const own = source ? providerModels(source) : [];
+    const models = own.length ? own : loadedModels.get(source) ?? [];
+    const mainModel = source && source === current ? ctx().getChatCompletionModel?.() : '';
 
-    $('#ps_sidecar_provider').text(source
-        ? `Uses your current provider, ${sourceName(source)}, and its API key.`
-        : 'Your roleplay uses a Text Completion connection. Picking a model needs Chat Completion, so use a connection profile instead.');
+    const providers = $('#ps_sidecar_source').empty();
+    providers.append(new Option(current ? `Same as my roleplay (${sourceName(current)})` : 'Same as my roleplay (not Chat Completion)', ''));
+    for (const provider of allProviders()) providers.append(new Option(provider.label, provider.id));
+    providers.val(s.sidecarSource || '');
+
+    $('#ps_sidecar_provider').text(!source
+        ? 'Your roleplay uses a Text Completion connection: choose a provider above for the sidecar.'
+        : source === current
+            ? `Uses ${sourceName(source)}, with the same key and settings as your roleplay.`
+            : `Uses the API key you saved for ${sourceName(source)} in SillyTavern's API Connections (plug icon). Your roleplay connection doesn't change.`);
+    $('.ps-sidecar-custom').toggle(source === 'custom' && source !== current);
+    $('#ps_sidecar_custom_url').val(s.sidecarCustomUrl);
+    $('#ps_sidecar_load').toggleClass('disabled', !source);
 
     const select = $('#ps_sidecar_model_list').empty().prop('disabled', !models.length);
     select.append(new Option(models.length ? 'Choose a model…' : 'No model list yet', ''));
@@ -980,7 +1004,7 @@ function fillSidecarModels() {
 
     const problem = s.sidecarModel ? modelSidecarProblem() : '';
     $('#ps_sidecar_model_hint').toggleClass('ps-warn-text', !!problem).text(problem
-        || (!models.length && source ? 'Connect in the API panel (plug icon) so SillyTavern loads the model list, or type a model ID.' : ''));
+        || (!models.length && source ? 'Press "Load models" to get the list from the provider, or type a model ID.' : ''));
 }
 
 /** Shows the panel for the chosen mode. */
@@ -1023,9 +1047,41 @@ function addSidecarControls() {
 
     const chooseModel = (model) => {
         s.sidecarModel = String(model ?? '').trim();
-        s.sidecarSource = s.sidecarModel ? currentSource() ?? '' : '';
         ctx().saveSettingsDebounced();
     };
+    $('#ps_sidecar_source').on('focus pointerdown', function () {
+        // Only refill when closed, so the open list doesn't jump.
+        if (!$(this).is(':focus')) fillSidecarModels();
+    }).on('change', function () {
+        const next = String($(this).val() ?? '');
+        if (next !== s.sidecarSource) {
+            s.sidecarSource = next;
+            // Model ids differ between providers.
+            s.sidecarModel = '';
+        }
+        ctx().saveSettingsDebounced();
+        fillSidecarModels();
+        refreshSettingsSummary();
+    });
+    $('#ps_sidecar_custom_url').on('input', function () {
+        s.sidecarCustomUrl = String($(this).val() ?? '').trim();
+        ctx().saveSettingsDebounced();
+    });
+    $('#ps_sidecar_load').on('click', async function () {
+        const source = sidecarProvider();
+        if (!source || $(this).hasClass('disabled')) return;
+        $(this).addClass('disabled').find('i').addClass('fa-spin');
+        try {
+            const models = await fetchProviderModels(source);
+            loadedModels.set(source, models);
+            toastr.success(`${models.length} models from ${sourceName(source)}.`, 'AI sidecar');
+        } catch (error) {
+            toastr.error(String(error?.message ?? error), 'AI sidecar');
+        } finally {
+            $(this).removeClass('disabled').find('i').removeClass('fa-spin');
+            fillSidecarModels();
+        }
+    });
     // Refresh lists when opened: the provider, its models, or the profiles may have changed meanwhile.
     $('#ps_sidecar_model_list').on('focus pointerdown', fillSidecarModels).on('change', function () {
         if (!$(this).val()) return;

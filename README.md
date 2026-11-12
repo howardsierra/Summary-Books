@@ -108,7 +108,7 @@ In Extensions → Private Scenes → **AI sidecar**, choose one of three options
 | Option | What it uses | Setup |
 |---|---|---|
 | **Same as the roleplay** | Your main connection and model | None (the default) |
-| **Pick a model** | Your current provider and API key, with another model, for example Claude Haiku 5.5 or Sonnet 5.5 | Choose from the provider's model list, or type any model ID it offers |
+| **Pick a model** | Any Chat Completion provider with the API key you saved for it in SillyTavern, and any of its models: for example Claude Haiku 5.5 on Anthropic while you roleplay through OpenRouter | Choose a **Provider** (default: the same as your roleplay), then a model from its list (**Load models** fetches it) or type a model ID |
 | **Connection profile** | A saved SillyTavern connection profile: any provider, or a local model | Save a profile first: open the plug icon, set up the connection, and save it under Connection Profile |
 
 Then:
@@ -116,8 +116,9 @@ Then:
 - **Use it for** lets you keep some tasks on your main model. Leak checks are the main candidate, since a stronger model notices subtler leaks.
 
 Details:
-- *Pick a model* needs a Chat Completion connection. If your roleplay uses Text Completion (most local backends), use a connection profile instead.
-- If you switch providers after picking a model, the extension notices that the model belongs to the old provider. It warns you once and uses your main connection until you pick a new one.
+- **Providers.** *Same as my roleplay* follows your main connection, including its reverse proxy and other connection settings. Any other provider uses the API key you saved for it under API Connections (the plug icon): save a key there once, then switch your roleplay back. Your roleplay connection is never changed. For **Custom (OpenAI-compatible)** you enter the endpoint URL, so a local server or a cheap hosted API works too.
+- This also works when your roleplay uses Text Completion (most local backends): pick a provider for the sidecar.
+- If the provider has no key saved, *Load models* and *Test the sidecar* say so, and background tasks fall back to your main connection with one warning.
 - Sidecar requests skip your roleplay's preset, so your RP instructions and jailbreaks don't bleed into a summary request.
 - If the sidecar fails, the main connection is used instead, with one warning. Turn this off if you'd rather it fail.
 

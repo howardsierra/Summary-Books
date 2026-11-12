@@ -1,6 +1,7 @@
 // Every background request (summaries, leak checks, character sheets, …) goes
 // through here. It uses the "AI sidecar" when one is chosen for that task:
-//  - 'model':   the current Chat Completion provider with a different model,
+//  - 'model':   a model you pick, from your roleplay's provider or any other
+//               Chat Completion provider you saved an API key for,
 //  - 'profile': a SillyTavern connection profile (any provider, local models),
 // and the main connection otherwise.
 
@@ -74,29 +75,43 @@ export function providerModels(source = currentSource()) {
         .map(option => ({ id: option.value, label: option.textContent.trim() || option.value, group: option.parentElement?.label ?? '' }));
 }
 
+/** The provider the "pick a model" sidecar uses: the chosen one, else the roleplay's. */
+export function sidecarProvider() {
+    return settings().sidecarSource || currentSource();
+}
+
+/** Every Chat Completion provider SillyTavern supports: [{ id, label }]. */
+export function allProviders() {
+    return [...document.querySelectorAll('#chat_completion_source option')]
+        .filter(option => option.value)
+        .map(option => ({ id: option.value, label: option.textContent.trim() || option.value }));
+}
+
 /** Why the "pick a model" sidecar can't run right now, or '' when it can. */
 export function modelSidecarProblem() {
     const s = settings();
     if (!s.sidecarModel) return 'No sidecar model is chosen.';
-    const source = currentSource();
-    if (!source) return 'Picking a model needs a Chat Completion connection (your roleplay uses Text Completion). Use a connection profile instead.';
-    if (s.sidecarSource && s.sidecarSource !== source) {
-        return `The sidecar model was chosen for ${sourceName(s.sidecarSource) || s.sidecarSource}, but your connection is now ${sourceName(source)}.`;
-    }
+    if (!sidecarProvider()) return 'Your roleplay uses a Text Completion connection, so choose a provider for the sidecar.';
+    if (sidecarProvider() === 'custom' && !customUrl()) return 'Enter the URL of your Custom (OpenAI-compatible) endpoint.';
     return '';
 }
 
-/** Sends messages through the current provider with another model (no preset). */
-async function viaModel(model, task, systemPrompt, prompt) {
-    const c = ctx();
-    const oai = c.chatCompletionSettings;
-    const result = await c.ChatCompletionService.processRequest({
-        stream: false,
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }],
-        max_tokens: TASKS[task].maxTokens,
-        model,
-        chat_completion_source: oai.chat_completion_source,
-        custom_url: oai.custom_url,
+/** The Custom endpoint URL: the sidecar's own, else the roleplay's when that is Custom too. */
+function customUrl() {
+    const oai = ctx().chatCompletionSettings ?? {};
+    return settings().sidecarCustomUrl || (currentSource() === 'custom' ? oai.custom_url : '') || '';
+}
+
+/**
+ * Connection fields for a provider. The roleplay's own extras (reverse proxy,
+ * regions, endpoints…) only apply when it is the same provider.
+ */
+function providerFields(source) {
+    const oai = ctx().chatCompletionSettings ?? {};
+    if (source !== currentSource()) return { chat_completion_source: source, custom_url: source === 'custom' ? customUrl() : undefined };
+    return {
+        chat_completion_source: source,
+        custom_url: source === 'custom' ? customUrl() : oai.custom_url,
         custom_include_headers: oai.custom_include_headers,
         reverse_proxy: oai.reverse_proxy,
         proxy_password: oai.proxy_password,
@@ -108,8 +123,34 @@ async function viaModel(model, task, systemPrompt, prompt) {
         azure_base_url: oai.azure_base_url,
         azure_deployment_name: oai.azure_deployment_name,
         azure_api_version: oai.azure_api_version,
+    };
+}
+
+/** Sends messages to the chosen provider and model (no preset). */
+async function viaModel(model, task, systemPrompt, prompt) {
+    const result = await ctx().ChatCompletionService.processRequest({
+        stream: false,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: prompt }],
+        max_tokens: TASKS[task].maxTokens,
+        model,
+        ...providerFields(sidecarProvider()),
     }, {}, true, null);
     return textOf(result);
+}
+
+/** Asks a provider for its model list with your saved key: [{ id, label, group }]. */
+export async function fetchProviderModels(source = sidecarProvider()) {
+    const response = await fetch('/api/backends/chat-completions/status', {
+        method: 'POST',
+        headers: ctx().getRequestHeaders(),
+        body: JSON.stringify(providerFields(source)),
+    });
+    if (!response.ok) throw new Error(`${sourceName(source)} did not return a model list (${response.status}). Is an API key saved for it?`);
+    const data = await response.json();
+    if (data?.error) throw new Error(`${sourceName(source)} did not return a model list. Is an API key saved for it?`);
+    const list = Array.isArray(data?.data) ? data.data : Array.isArray(data?.models) ? data.models : Array.isArray(data) ? data : [];
+    return list.map(m => (typeof m === 'string' ? m : m?.id ?? m?.name)).filter(Boolean).sort()
+        .map(id => ({ id, label: id, group: '' }));
 }
 
 /** Text out of whatever shape a connection returns. */
@@ -181,7 +222,7 @@ export async function testSidecar() {
             ? await viaModel(sidecar.model, 'clock', system, 'Reply with OK.')
             : await viaSidecar(sidecar.profile, 'clock', system, 'Reply with OK.');
         const seconds = ((performance.now() - started) / 1000).toFixed(1);
-        const label = sidecar.kind === 'model' ? `${sidecar.model} via ${sourceName()}` : `${sidecar.name}${sidecar.profile.model ? ` (${sidecar.profile.model})` : ''}`;
+        const label = sidecar.kind === 'model' ? `${sidecar.model} via ${sourceName(sidecarProvider())}` : `${sidecar.name}${sidecar.profile.model ? ` (${sidecar.profile.model})` : ''}`;
         toastr.success(`${label} answered “${answer.trim().slice(0, 40)}” in ${seconds}s.`, 'AI sidecar works');
     } catch (error) {
         toastr.error(String(error?.cause?.message ?? error?.message ?? error), `AI sidecar (${sidecar.name}) failed`);

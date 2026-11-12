@@ -68,7 +68,7 @@ async function open(contextOptions) {
     await page.waitForFunction(() => window.SillyTavern?.getContext && typeof globalThis.privateScenesInterceptor === 'function', null, { timeout: 60000 });
     await page.waitForTimeout(3000);
     // Every suite starts on the main model; the sidecar suites pick their own.
-    await page.evaluate(() => { const s = SillyTavern.getContext().extensionSettings.privateScenes; if (s) Object.assign(s, { sidecarProfile: '', sidecarMode: 'main', sidecarModel: '', sidecarModeSet: true }); });
+    await page.evaluate(() => { const s = SillyTavern.getContext().extensionSettings.privateScenes; if (s) Object.assign(s, { sidecarProfile: '', sidecarMode: 'main', sidecarModel: '', sidecarSource: '', sidecarCustomUrl: '', sidecarModeSet: true }); });
     return { browser, page };
 }
 const openMobile = () => open({ ...devices['iPhone 13'] });
@@ -82,6 +82,9 @@ async function configure(page, overrides = {}) {
 async function setupApi(page) {
     await page.evaluate(async (port) => {
         $('#main_api').val('openai').trigger('change');
+        // A suite may have left a reverse proxy behind (sidecar-model).
+        $('#openai_reverse_proxy').val('').trigger('input');
+        $('#openai_proxy_password').val('').trigger('input');
         $('#chat_completion_source').val('custom').trigger('change');
         $('#custom_api_url_text').val(`http://127.0.0.1:${port}/v1`).trigger('input');
         $('#custom_model_id').val('mock').trigger('input');
@@ -89,6 +92,8 @@ async function setupApi(page) {
         $('#api_button_openai').trigger('click');
     }, MOCK_PORT);
     await page.waitForFunction(() => SillyTavern.getContext().onlineStatus && SillyTavern.getContext().onlineStatus !== 'no_connection', null, { timeout: 30000 });
+    // The provider switch is applied asynchronously; make sure it has landed.
+    await page.waitForFunction(() => { const o = SillyTavern.getContext().chatCompletionSettings; return o.chat_completion_source === 'custom' && !o.reverse_proxy; }, null, { timeout: 15000 });
 }
 
 /** Creates (once) and opens a narrator character; a fresh name gives a fresh chat. */
