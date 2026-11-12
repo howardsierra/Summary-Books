@@ -16,7 +16,7 @@ import {
 import { PROMPTS, PROMPT_FIELDS } from './prompts.js';
 
 /** Shown in the settings header; keep in step with manifest.json. */
-const EXTENSION_VERSION = '0.13.0';
+const EXTENSION_VERSION = '0.14.0';
 import { editClock, openMemory, refreshMemory } from './hub.js';
 import { lastMeasure, openBudget } from './budget.js';
 
@@ -328,6 +328,17 @@ export function actionButton(cls, icon, label, title = '') {
     button.find('i').addClass(icon);
     if (label) button.append($('<span></span>').text(label));
     else button.addClass('ps-btn-icon');
+    button.on('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        event.stopPropagation();
+        $(this).trigger('click');
+    }).on('click', function (event) {
+        if ($(this).hasClass('disabled') || this.getAttribute('aria-disabled') === 'true') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    });
     return button;
 }
 
@@ -1142,11 +1153,14 @@ let settingsWindowOpen = false;
  */
 export function showPopup(content, { dialogClass, closeResult = 'affirmative', setup = null, ...options }) {
     const c = ctx();
+    const opener = document.activeElement;
     const popup = new c.Popup(content, c.POPUP_TYPE.TEXT, '', options);
     if (dialogClass) popup.dlg.classList.add(dialogClass);
     $(content).find('.ps-window-close').on('click', () => closeResult === 'cancel' ? popup.completeCancelled() : popup.completeAffirmative());
     setup?.(popup);
-    return popup.show();
+    return popup.show().finally(() => {
+        if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true });
+    });
 }
 
 /** A round close button for a window's title bar or banner. */
@@ -1239,7 +1253,9 @@ function tile(action, icon, title, status, { tone = '', badge = 0, disabled = fa
     el.find('i').addClass(icon);
     el.find('b').text(title);
     el.find('small').text(status);
-    if (badge) el.append($('<span class="ps-tile-badge"></span>').text(badge));
+    if (badge) el.append($('<span class="ps-tile-badge"></span>').text(badge).attr('aria-label', `${badge} need attention`));
+    if (['scene', 'memory', 'summarize'].includes(action)) el.addClass('ps-tile-primary');
+    if (disabled) el.attr('tabindex', '-1');
     return el;
 }
 
@@ -1284,7 +1300,8 @@ export async function openLauncher() {
             : 'What the model gets, in tokens', { tone: lastMeasure && s.memoryBudget && lastMeasure.always > s.memoryBudget ? 'warn' : '' }),
         tile('settings', 'fa-sliders', 'Settings', GROUP_SUMMARIES.sidecar(s) === 'Same model as the roleplay' ? 'Sidecar, prompts, everything' : `Sidecar: ${GROUP_SUMMARIES.sidecar(s)}`),
     );
-    content.append(grid);
+    grid.find('[data-action=memory]').prependTo(grid);
+    content.append($('<p class="ps-launcher-label">Your story</p>'), grid);
     if (!s.enabled) content.append('<div class="ps-notice ps-notice-warn"><i class="fa-solid fa-power-off"></i><span>Private Scenes is turned off. Turn it on in Settings.</span></div>');
 
     const actions = {

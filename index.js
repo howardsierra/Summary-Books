@@ -24,7 +24,7 @@ import { armCapture, captureChatPrompt, captureTextPrompt, openBudget, scheduleB
 import { tidyText } from './src/tidy.js';
 import { dropStrayTags, fromHtml, hideSceneNotes, mapParts, stampPartIds, takeSceneNotes, toDisplayMarkers } from './src/parts.js';
 
-const VERSION = '0.11.0';
+const VERSION = '0.14.0';
 
 const PROMPT_KEY = 'private_scenes_rules';
 const CLOCK_KEY = 'private_scenes_clock';

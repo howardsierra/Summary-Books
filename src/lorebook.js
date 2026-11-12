@@ -2,6 +2,7 @@
 // entries in the chat-bound lorebook, merges old story entries into chapters,
 // queues summaries for review, and notices when the chat changed under them.
 
+import { chatGuard, keyedQueue } from './async.js';
 import { createWorldInfoEntry } from '../../../../world-info.js';
 import {
     BOOK_KEY, adoptScene, chatState, ctx, findScenes, formatMembers, formatTemplate, getFlag, hooks,
@@ -16,24 +17,46 @@ const WI_AFTER_CHAR = 1;
 
 /** Scene ids, memory ids and drafts currently being summarized. */
 export const saving = new Set();
+/** Last save failure for each target; cleared when the user retries. */
+export const saveFailures = new Map();
+const feedbackByChat = new WeakMap();
+export const saveFeedback = () => feedbackByChat.get(ctx().chatMetadata);
+function beginSave(retry) {
+    const metadata = ctx().chatMetadata;
+    const needsReview = reviewing();
+    const feedback = { status: 'saving', text: 'Saving memory… You can keep reading.', retry };
+    feedbackByChat.set(metadata, feedback);
+    return (error) => {
+        // A later save owns the shared status now; do not overwrite it.
+        if (feedbackByChat.get(metadata) !== feedback) return;
+        feedback.status = error ? 'failed' : 'saved';
+        feedback.text = error ? `Save failed: ${error.message ?? error}` : needsReview ? 'Summary ready for review.' : 'Memory saved.';
+        if (!error) feedback.retry = null;
+    };
+}
+const writeQueue = keyedQueue();
+const memoryRanges = new Set();
 
 /** A lorebook being created right now, per chat, so simultaneous saves share it. */
 const creatingBook = new Map();
 
 /** The chat-bound lorebook; creates and binds one when missing. */
 export async function getBook(create) {
+    const assertChat = chatGuard(ctx);
     // A branch that was just opened gets its own copy first; don't write into the shared one.
     if (branching) await branching;
+    assertChat();
     const c = ctx();
     const existing = c.chatMetadata[BOOK_KEY];
     if (existing && c.getWorldInfoNames().includes(existing)) return existing;
     if (!create) return null;
     if (!c.chatId) throw new Error('Open a chat first.');
     // Two saves finishing together (a scene and a thread, say) must not create two lorebooks.
-    if (!creatingBook.has(c.chatId)) {
-        creatingBook.set(c.chatId, createBook().finally(() => creatingBook.delete(c.chatId)));
+    const chatId = c.chatId;
+    if (!creatingBook.has(chatId)) {
+        creatingBook.set(chatId, createBook().finally(() => creatingBook.delete(chatId)));
     }
-    return creatingBook.get(c.chatId);
+    return creatingBook.get(chatId);
 }
 
 /** An unused lorebook name for the current chat. */
@@ -47,10 +70,12 @@ function newBookName() {
 const BOOK_PREFIX = 'Private Timeline - ';
 
 async function createBook() {
+    const assertChat = chatGuard(ctx);
     const c = ctx();
     const name = newBookName();
     await c.saveWorldInfo(name, { entries: {} }, true);
     await c.updateWorldInfoList();
+    assertChat();
     c.chatMetadata[BOOK_KEY] = name;
     chatState().bookOwner = c.chatId;
     await c.saveMetadata();
@@ -206,30 +231,42 @@ function repoint(node, from, to) {
 }
 
 /** Creates or updates an entry; returns its uid. */
-export async function upsertEntry(book, uid, fields) {
-    const c = ctx();
-    const data = await c.loadWorldInfo(book);
-    if (!data?.entries) throw new Error(`Could not load lorebook "${book}".`);
-    let entry = uid !== undefined && uid !== null ? data.entries[uid] : null;
-    entry ??= createWorldInfoEntry(book, data);
-    if (!entry) throw new Error('Could not create a lorebook entry.');
-    Object.assign(entry, { position: WI_AFTER_CHAR, addMemo: true, disable: false }, fields);
-    await c.saveWorldInfo(book, data, true);
-    c.reloadWorldInfoEditor(book);
-    hooks.entriesChanged();
-    return entry.uid;
-}
-
-export async function deleteEntry(book, uid) {
-    if (!book) return;
-    const c = ctx();
-    const data = await c.loadWorldInfo(book);
-    if (data?.entries?.[uid]) {
-        delete data.entries[uid];
+export function upsertEntry(book, uid, fields) {
+    const assertChat = chatGuard(ctx);
+    return writeQueue(book, async () => {
+        assertChat();
+        const c = ctx();
+        const data = await c.loadWorldInfo(book);
+        assertChat();
+        if (!data?.entries) throw new Error(`Could not load lorebook "${book}".`);
+        let entry = uid !== undefined && uid !== null ? data.entries[uid] : null;
+        entry ??= createWorldInfoEntry(book, data);
+        if (!entry) throw new Error('Could not create a lorebook entry.');
+        Object.assign(entry, { position: WI_AFTER_CHAR, addMemo: true, disable: false }, fields);
         await c.saveWorldInfo(book, data, true);
+        assertChat();
         c.reloadWorldInfoEditor(book);
         hooks.entriesChanged();
-    }
+        return entry.uid;
+    });
+}
+
+export function deleteEntry(book, uid) {
+    const assertChat = chatGuard(ctx);
+    return writeQueue(book, async () => {
+        if (!book) return;
+        assertChat();
+        const c = ctx();
+        const data = await c.loadWorldInfo(book);
+        assertChat();
+        if (data?.entries?.[uid]) {
+            delete data.entries[uid];
+            await c.saveWorldInfo(book, data, true);
+            assertChat();
+            c.reloadWorldInfoEditor(book);
+            hooks.entriesChanged();
+        }
+    });
 }
 
 async function hideMessages(ids) {
@@ -337,6 +374,7 @@ const reviewing = () => !!settings().reviewBeforeSave;
  * meta (sources, hash, clock) is kept from the existing record when not given.
  */
 export async function writeSceneEntry(scene, summary, keywords = [], meta = {}) {
+    const assertChat = chatGuard(ctx);
     const s = settings();
     scene = adoptScene(scene);
     const timeline = chatState().timeline;
@@ -344,6 +382,7 @@ export async function writeSceneEntry(scene, summary, keywords = [], meta = {}) 
     const revealed = revealedNames(scene.id);
 
     const book = await getBook(true);
+    assertChat();
     const uid = await upsertEntry(book, record?.book === book ? record.uid : null, {
         // No scene number: numbers shift when an earlier message gets flagged later.
         comment: `🕵️ Private — ${formatMembers(scene.members)} (${scene.part ? `part of msg ${scene.ids[0]}` : `msgs ${scene.ids[0]}–${scene.ids.at(-1)}`})`,
@@ -354,6 +393,7 @@ export async function writeSceneEntry(scene, summary, keywords = [], meta = {}) 
         order: Number(s.entryOrder) + scene.ids[0],
     });
 
+    assertChat();
     timeline[scene.id] = {
         ...record,
         book, uid, summary, keywords: [...keywords], members: [...scene.members],
@@ -378,8 +418,11 @@ export async function refreshSceneEntry(sceneId) {
 }
 
 async function commitScene(scene, parsed, threadIds) {
+    const assertChat = chatGuard(ctx);
     await writeSceneEntry(scene, parsed.summary, parsed.keywords, { ...sourcesOf(scene.ids), clock: clockAfter(parsed) });
+    assertChat();
     await applyExtras(parsed, { threadIds, members: scene.members, sceneId: scene.id, at: scene.ids.at(-1) });
+    assertChat();
     // A private part shares its message with public text, so its message stays visible.
     if (settings().hideAfterSave && !scene.part) await hideMessages(scene.ids);
 }
@@ -393,6 +436,8 @@ async function commitSceneDraft(draft) {
 export async function saveScene(scene, { quiet = false } = {}) {
     if (saving.has(scene.id)) return;
     scene = adoptScene(scene);
+    const finishSave = beginSave(() => saveScene(scene, { quiet }));
+    saveFailures.delete(scene.id);
     saving.add(scene.id);
     hooks.changed();
     try {
@@ -406,8 +451,11 @@ export async function saveScene(scene, { quiet = false } = {}) {
         if (!quiet) toastr.success(`Saved private scene #${scene.index} to the lorebook.`, 'Private Scenes');
         return parsed.summary;
     } catch (error) {
+        finishSave(error);
+        saveFailures.set(scene.id, String(error?.message ?? error));
         reportError(error, 'could not save scene');
     } finally {
+        if (!saveFailures.has(scene.id)) finishSave();
         saving.delete(scene.id);
         hooks.changed();
     }
@@ -454,9 +502,11 @@ const LEVEL_LABEL = ['📜 Story', '📚 Chapter', '🏛️ Arc'];
 export const levelName = (level) => ['Story', 'Chapter', 'Arc'][level ?? 0] ?? 'Story';
 
 export async function writeMemoryEntry(memory, summary, keywords = [], meta = {}) {
+    const assertChat = chatGuard(ctx);
     const s = settings();
     const state = chatState();
     const book = await getBook(true);
+    assertChat();
     Object.assign(memory, meta);
     const uid = await upsertEntry(book, memory.book === book ? memory.uid : null, {
         comment: `${LEVEL_LABEL[memory.level ?? 0] ?? LEVEL_LABEL[0]} — msgs ${memory.from}–${memory.to}`,
@@ -465,6 +515,7 @@ export async function writeMemoryEntry(memory, summary, keywords = [], meta = {}
         constant: !!s.memoryConstant,
         order: Number(s.entryOrder) + memory.from,
     });
+    assertChat();
     Object.assign(memory, { book, uid, summary, keywords: [...keywords], savedAt: Date.now() });
     if (!state.memories.includes(memory)) state.memories.push(memory);
     state.memories.sort((a, b) => a.from - b.from);
@@ -473,13 +524,18 @@ export async function writeMemoryEntry(memory, summary, keywords = [], meta = {}
 }
 
 async function commitMemory(memory, parsed, threadIds, ids) {
+    const assertChat = chatGuard(ctx);
     const state = chatState();
     memory.level ??= 0;
     await writeMemoryEntry(memory, parsed.summary, parsed.keywords, { ...sourcesOf(ids), clock: clockAfter(parsed) });
+    assertChat();
     state.memoryCursor = Math.max(state.memoryCursor, memory.to + 1);
     await ctx().saveMetadata();
+    assertChat();
     await applyExtras(parsed, { threadIds, members: null, at: memory.to });
+    assertChat();
     if (settings().hideAfterSave) await hideMessages(ids);
+    assertChat();
     if (settings().autoSheets) await updateSheets(parsed.summary, { at: memory.to });
     await maybeConsolidate();
 }
@@ -498,9 +554,14 @@ export async function saveMemory(from, to, { quiet = false, existing = null } = 
         if (!quiet) toastr.info('There are no public messages in that range to summarize.', 'Private Scenes');
         return;
     }
+    const rangeKey = JSON.stringify([ctx().chatId, from, to]);
+    if (memoryRanges.has(rangeKey)) return;
     const memory = existing ?? { id: newId('mem'), from, to, level: 0 };
     if (saving.has(memory.id)) return;
+    const finishSave = beginSave(() => saveMemory(from, to, { quiet, existing }));
+    saveFailures.delete(memory.id);
     saving.add(memory.id);
+    memoryRanges.add(rangeKey);
     hooks.changed();
     try {
         const { parsed, threadIds } = await summarize(settings().memoryPrompt, transcript(ids), { threadMembers: null, clock: true });
@@ -515,8 +576,12 @@ export async function saveMemory(from, to, { quiet = false, existing = null } = 
         if (!quiet) toastr.success(`Saved messages ${from}–${to} to the lorebook as story memory.`, 'Private Scenes');
         return parsed.summary;
     } catch (error) {
+        finishSave(error);
+        saveFailures.set(memory.id, String(error?.message ?? error));
         reportError(error, 'could not save story memory');
     } finally {
+        if (!saveFailures.has(memory.id)) finishSave();
+        memoryRanges.delete(rangeKey);
         saving.delete(memory.id);
         hooks.changed();
     }

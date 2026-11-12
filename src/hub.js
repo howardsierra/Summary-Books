@@ -7,7 +7,7 @@ import {
 } from './core.js';
 import {
     acceptCurrent, approveDraft, canConsolidate, discardDraft, levelName, maybeConsolidate, orphanScenes,
-    refreshSceneEntry, removeMemory, removeSceneEntry, resummarizeMemory, saveScene, saveStorySoFar, saving,
+    refreshSceneEntry, removeMemory, removeSceneEntry, resummarizeMemory, saveScene, saveStorySoFar, saving, saveFailures, saveFeedback,
     splitChapter, staleItems, writeMemoryEntry, writeSceneEntry,
 } from './lorebook.js';
 import {
@@ -47,7 +47,7 @@ export async function openMemory(startTab = 'timeline') {
     header.append(windowCloseButton()[0]);
     $(header).find('.ps-popup-titles').append('<div class="ps-clock-row"></div>');
     root.append(header);
-    $(root).append('<div class="ps-tabs" role="tablist"></div><div class="ps-tab-body"></div>');
+    $(root).append('<div class="ps-tabs" role="tablist" aria-label="Story memory"></div><div class="ps-tab-body" role="tabpanel" id="ps-memory-panel"></div>');
     refreshMemory();
     await showPopup(root, { dialogClass: 'ps-window-dialog', wide: true, large: true, allowVerticalScrolling: true, okButton: 'Close' });
     root = null;
@@ -77,7 +77,7 @@ function renderTabs() {
     const attention = { timeline: state.drafts.length + staleItems().length };
     for (const [id, icon, label] of TABS) {
         const button = $('<div class="ps-tab" role="tab" tabindex="0"><i class="fa-solid" aria-hidden="true"></i><span></span></div>');
-        button.toggleClass('ps-tab-active', id === tab).attr('aria-selected', String(id === tab));
+        button.toggleClass('ps-tab-active', id === tab).attr({ 'aria-selected': String(id === tab), tabindex: id === tab ? '0' : '-1', id: `ps-tab-${id}`, 'aria-controls': 'ps-memory-panel' });
         button.find('i').addClass(icon);
         button.find('span').text(label);
         if (counts[id]) button.append($('<b class="ps-tab-count"></b>').text(counts[id]));
@@ -86,13 +86,25 @@ function renderTabs() {
             button.attr('aria-label', `${label}, ${attention[id]} need your attention`);
         }
         button.on('click keydown', (e) => {
+            if (e.type === 'keydown' && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                e.preventDefault();
+                const index = TABS.findIndex(([key]) => key === id);
+                const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1
+                    : (index + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+                tab = TABS[next][0];
+                refreshMemory();
+                $(root).find(`#ps-tab-${tab}`).trigger('focus');
+                return;
+            }
             if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
             e.preventDefault();
             tab = id;
             refreshMemory();
+            $(root).find(`#ps-tab-${tab}`).trigger('focus');
         });
         bar.append(button);
     }
+    $(root).find('.ps-tab-body').attr('aria-labelledby', `ps-tab-${tab}`);
     // Keep the active tab visible when the bar scrolls sideways (phones).
     const active = bar.find('.ps-tab-active')[0];
     if (active) bar[0].scrollLeft = Math.max(0, active.offsetLeft - (bar[0].clientWidth - active.offsetWidth) / 2);
@@ -146,6 +158,7 @@ const STALE_TEXT = {
 function sceneStatus(scene) {
     const record = chatState().timeline[scene.id];
     if (saving.has(scene.id)) return ['saving', 'fa-spinner fa-spin', 'Saving…'];
+    if (saveFailures.has(scene.id)) return ['failed', 'fa-circle-exclamation', 'Save failed · retry below'];
     if (!record) return ['unsaved', 'fa-circle-dot', 'Not saved'];
     const source = sourceStatus(record);
     if (source.state !== 'ok') return ['stale', 'fa-triangle-exclamation', STALE_TEXT[source.state]];
@@ -169,6 +182,15 @@ function timelineCard(kind, icon) {
         </li>`).addClass(`ps-kind-${kind}`).find('.ps-tl-node i').addClass(icon).end();
 }
 
+function groupCardActions(item) {
+    const actions = item.find('.ps-tl-actions');
+    const secondary = actions.children('.ps-act-edit, .ps-act-remove, .ps-act-split');
+    if (!secondary.length) return;
+    const menu = $('<details class="ps-card-more"><summary>More actions</summary><div class="ps-card-more-body"></div></details>');
+    menu.find('.ps-card-more-body').append(secondary);
+    actions.append(menu);
+}
+
 function renderSceneCard(scene) {
     const record = chatState().timeline[scene.id];
     const [cls, icon, text] = sceneStatus(scene);
@@ -176,7 +198,8 @@ function renderSceneCard(scene) {
     const range = scene.part ? `Part of message ${scene.ids[0]}` : scene.ids.length > 1 ? `Messages ${scene.ids[0]}–${scene.ids.at(-1)}` : `Message ${scene.ids[0]}`;
 
     const item = timelineCard('scene', 'fa-user-secret').addClass(`ps-${cls}`);
-    item.find('.ps-tl-title').text(`Secret · Scene ${scene.index}`);
+    item.find('.ps-tl-title').text(`Private scene ${scene.index}`);
+    item.find('.ps-tl-members').before('<span class="ps-visibility"><i class="fa-solid fa-lock" aria-hidden="true"></i> Private · only these characters</span>');
     item.find('.ps-tl-range span').text(scene.part ? range : `${range} · ${plural(scene.ids.length, 'msg')}`);
     item.find('.ps-tl-top').append(statusPill(cls, icon, text));
     item.find('.ps-tl-members').append(chips(scene.members));
@@ -192,6 +215,7 @@ function renderSceneCard(scene) {
     }
 
     const summary = item.find('.ps-tl-summary');
+    if (saveFailures.has(scene.id)) item.find('.ps-tl-actions').before($('<p class="ps-save-error" role="alert"></p>').text(saveFailures.get(scene.id)));
     if (record?.summary) {
         summary.text(record.summary);
         summary.after(keywordTags(record.keywords));
@@ -203,7 +227,7 @@ function renderSceneCard(scene) {
 
     const actions = item.find('.ps-tl-actions');
     actions.append(actionButton('ps-act-jump', 'fa-location-arrow', 'Jump', 'Scroll to this scene').on('click', () => jumpTo(scene.ids[0])));
-    actions.append(actionButton('ps-act-save', 'fa-wand-magic-sparkles', record ? 'Re-summarize' : 'Save to lorebook')
+    actions.append(actionButton('ps-act-save', 'fa-wand-magic-sparkles', saveFailures.has(scene.id) ? 'Retry save' : record ? 'Re-summarize' : 'Save to lorebook')
         .toggleClass('disabled', saving.has(scene.id)).on('click', () => saveScene(scene)));
     if (cls === 'stale') {
         actions.append(actionButton('ps-act-keep', 'fa-check', 'Keep as is', 'The saved summary is still right').on('click', () => acceptCurrent('scene', scene.id)));
@@ -218,6 +242,7 @@ function renderSceneCard(scene) {
             if (await confirm(`Remove scene ${scene.index} from the lorebook? The chat messages stay private.`)) await removeSceneEntry(scene.id);
         }));
     }
+    groupCardActions(item);
     return item;
 }
 
@@ -232,6 +257,7 @@ function renderOrphanCard({ id, record }) {
     item.find('.ps-tl-actions').append(actionButton('ps-act-remove', 'fa-trash-can', 'Remove from lorebook').on('click', async () => {
         if (await confirm('Remove this secret from the lorebook? Its messages are no longer in the chat.')) await removeSceneEntry(id);
     }));
+    groupCardActions(item);
     return item;
 }
 
@@ -248,9 +274,10 @@ function renderMemoryCard(memory) {
     item.find('.ps-tl-title').text(levelName(level));
     item.find('.ps-tl-range span').text(`Messages ${from}–${to}${memory.parts?.length ? ` · merged from ${memory.parts.length} parts` : ''}`);
     item.find('.ps-tl-top').append(busy ? statusPill('saving', 'fa-spinner fa-spin', 'Saving…')
+        : saveFailures.has(memory.id) ? statusPill('failed', 'fa-circle-exclamation', 'Save failed · retry below')
         : stale ? statusPill('stale', 'fa-triangle-exclamation', STALE_TEXT[source.state])
             : statusPill('saved', 'fa-book-bookmark', 'In lorebook'));
-    item.find('.ps-tl-members').remove();
+    item.find('.ps-tl-members').replaceWith('<span class="ps-visibility"><i class="fa-solid fa-users" aria-hidden="true"></i> Public story · shared events</span>');
     item.find('.ps-tl-summary').text(memory.summary ?? '').after(keywordTags(memory.keywords));
     item.find('.ps-card-meta').append(clockTags(memory.clock));
 
@@ -274,6 +301,7 @@ function renderMemoryCard(memory) {
     actions.append(actionButton('ps-act-remove', 'fa-trash-can', '', 'Remove this memory from the lorebook').on('click', async () => {
         if (await confirm(`Remove the ${levelName(level).toLowerCase()} entry for messages ${from}–${to}?`)) await removeMemory(memory.id);
     }));
+    groupCardActions(item);
     return item;
 }
 
@@ -320,6 +348,14 @@ function renderDraftCard(draft) {
 function renderTimeline(body) {
     const state = chatState();
     const scenes = findScenes();
+    const feedback = saveFeedback();
+    const status = $('<div class="ps-save-feedback" role="status" aria-live="polite"></div>')
+        .attr('aria-busy', String(feedback?.status === 'saving'))
+        .append($('<span></span>').text(feedback?.text ?? 'Unsaved and out-of-date entries are marked below.'));
+    if (feedback?.status === 'failed' && feedback.retry) {
+        status.append(actionButton('ps-retry-save', 'fa-rotate-right', 'Retry save').on('click', feedback.retry));
+    }
+    body.append(status);
 
     if (state.drafts.length) {
         const section = $('<section class="ps-section-block"><h4><i class="fa-solid fa-hourglass-half"></i> Waiting for your review</h4></section>');

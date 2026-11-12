@@ -218,6 +218,10 @@ Open it from the launcher (wand menu → Private Scenes → **Prompt & budget**)
 
 ## Story Memory
 
+Timeline cards show who a private scene is for, its story time, and whether it is saved or needs attention. **More actions** holds editing, removal, and chapter splitting. Save progress and failures appear above the timeline; **Retry save** repeats the failed operation.
+
+Use Left/Right arrows to move between Story Memory tabs, Home/End to jump to the first/last tab, and Enter or Space to activate action buttons. Closing a window returns focus to its opener when it is still available.
+
 Open it from the launcher (wand menu → Private Scenes → *Story memory*), the 📖 button on the scene bar, or `/memory`. The header shows the **story clock**, and the tabs are:
 
 - **Timeline.** Secrets and story entries in story order.

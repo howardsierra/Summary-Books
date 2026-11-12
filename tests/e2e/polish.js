@@ -1,0 +1,36 @@
+// Keyboard navigation, explicit privacy cues, save feedback, and secondary actions.
+const L = require('../lib');
+L.suite('polish', async page => {
+    await L.start(page);
+    await L.send(page, '@scene Ana, Kael: Ana whispers about the royal seal.');
+    await L.run(page, '/private-end');
+    await L.run(page, '/memory timeline');
+    const timeline = page.locator('dialog[open] .ps-memory');
+    await timeline.waitFor();
+    L.check('private cards identify their audience without color', /Private · only these characters/.test(await timeline.innerText()));
+    L.check('save feedback is available', await timeline.locator('[role=status]').count() === 1);
+    const tab = timeline.locator('#ps-tab-timeline');
+    await tab.focus();
+    await page.keyboard.press('ArrowRight');
+    L.check('right arrow selects and focuses Characters', await page.evaluate(() => document.activeElement?.id === 'ps-tab-characters' && document.activeElement.getAttribute('aria-selected') === 'true'));
+    await page.keyboard.press('Home');
+    L.check('Home returns to Timeline', await page.evaluate(() => document.activeElement?.id === 'ps-tab-timeline'));
+    const more = timeline.locator('.ps-card-more').first();
+    await more.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    L.check('secondary actions open with the keyboard', await more.getAttribute('open') !== null);
+    L.check('edit action is visible in expanded menu', await more.locator('.ps-act-edit').isVisible());
+    await page.route('**/api/backends/chat-completions/generate', route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Test service unavailable' } }) }));
+    await timeline.locator('.ps-act-save').first().click();
+    await timeline.locator('.ps-retry-save').waitFor();
+    L.check('failed saves offer an explicit retry', /Save failed/.test(await timeline.locator('[role=status]').innerText()));
+    await page.unroute('**/api/backends/chat-completions/generate');
+    await timeline.locator('.ps-retry-save').focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('.ps-save-feedback')?.textContent.includes('Memory saved.'));
+    L.check('keyboard retry completes and clears the error', await timeline.locator('.ps-retry-save').count() === 0);
+    await page.evaluate(() => toastr.clear());
+    await page.waitForTimeout(500);
+    await L.shot(page, 'polish-timeline-desktop');
+    await L.closeAll(page);
+});

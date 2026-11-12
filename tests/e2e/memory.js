@@ -77,6 +77,7 @@ L.suite('memory', async (page) => {
     check('"keep as is" clears one', (await page.locator('.ps-status-stale').count()) === stale - 1);
 
     section('split chapter');
+    await page.locator('.ps-card-more').filter({ has: page.locator('.ps-act-split') }).first().locator('summary').click();
     await page.locator('.ps-act-split').first().click();
     await page.waitForTimeout(1000);
     eq('chapter split back into parts', (await L.state(page)).memories.map(m => `L${m.level}`), ['L0', 'L0']);

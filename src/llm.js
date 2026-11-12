@@ -5,6 +5,7 @@
 //  - 'profile': a SillyTavern connection profile (any provider, local models),
 // and the main connection otherwise.
 
+import { chatGuard } from './async.js';
 import { ctx, settings } from './core.js';
 
 /** Background tasks, the setting that routes each one, and a sensible answer length. */
@@ -188,6 +189,13 @@ function viaMain(task, systemPrompt, prompt) {
  * @returns {Promise<string>}
  */
 export async function llm(task, { systemPrompt, prompt }) {
+    const assertChat = chatGuard(ctx);
+    const result = await requestForChat(task, { systemPrompt, prompt }, assertChat);
+    assertChat();
+    return result;
+}
+
+async function requestForChat(task, { systemPrompt, prompt }, assertChat) {
     const sidecar = sidecarFor(task);
     if (!sidecar) return String(await viaMain(task, systemPrompt, prompt) ?? '');
     try {
@@ -195,6 +203,7 @@ export async function llm(task, { systemPrompt, prompt }) {
             ? await viaModel(sidecar.model, task, systemPrompt, prompt)
             : await viaSidecar(sidecar.profile, task, systemPrompt, prompt);
     } catch (error) {
+        assertChat();
         console.error(`[Private Scenes] Sidecar "${sidecar.name}" failed for ${task}`, error);
         const reason = error?.cause?.message ?? error?.message ?? error;
         if (!settings().sidecarFallback) throw new Error(`The AI sidecar (${sidecar.name}) failed: ${reason}`);
